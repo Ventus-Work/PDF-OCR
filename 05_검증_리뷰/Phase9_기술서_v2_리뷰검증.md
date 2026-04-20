@@ -300,9 +300,9 @@ gap 9개 분류:    수치 오류 (정상)
 
 0. [x] **§5 Step 0 실행** — 테스트 수치 gap 추적 완료 (파라미터 증식에 의한 정상 수치)
 1. ✅ **v2.1 기술서 확정** — 완료 (2026-04-17)
-2. [ ] `tests/golden/input/` 에 샘플 PDF 4종 수집 (estimate / bom / pumsem / generic)
-3. [ ] 현재 Phase 8 상태로 Golden File 생성 (§6.2 명령 실행)
-4. [ ] `git tag phase9-baseline` — Phase 8 종단 태그 확보
+2. [x] `tests/golden/input/` 에 샘플 PDF 4종 수집 (estimate / bom / pumsem / generic)
+3. [x] 현재 Phase 8 상태로 Golden File 생성 (§6.2 명령 실행)
+4. [x] `git tag phase9-baseline` — Phase 8 종단 태그 확보
 
 ### 🟢 Phase 9 Step 1 착수 시
 
