@@ -1,0 +1,31 @@
+# ps-docparser .gitignore
+
+# API 키, 환경변수
+.env
+
+# 캐시 데이터 (코드와 분리된 숨김 폴더)
+.cache/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# 파일 시스템 및 테스트
+venv_test/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# 출력 파일
+output/
+
+# 로그
+*.log
+
+# IDE
+.vscode/
+.idea/

@@ -1,0 +1,38 @@
+[run]
+source = .
+branch = True
+omit =
+    tests/*
+    # 기존 ad-hoc 테스트 파일 제외
+    test_phase*.py
+    test_*.py
+    _test_*.py
+    _debug_*.py
+    _inspect_*.py
+    audit_main.py
+    batch_test.py
+    inspect_db.py
+    verify_phase4.py
+    # 외부 라이브러리
+    */site-packages/*
+    # __init__ 단순 파일
+    */__init__.py
+    # 캐시/빌드
+    .cache/*
+    build/*
+    dist/*
+
+[report]
+precision = 2
+show_missing = True
+skip_covered = False
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    \.\.\.
+
+[html]
+directory = htmlcov
