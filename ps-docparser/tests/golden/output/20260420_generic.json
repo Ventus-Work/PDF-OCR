@@ -1,0 +1,18 @@
+﻿[
+  {
+    "section_id": "doc",
+    "title": "generic.md",
+    "department": "",
+    "chapter": "",
+    "page": 0,
+    "source_file": "generic.md",
+    "toc_title": "",
+    "clean_text": "# 견적서 샘플 (단순형)\n\n## 제1편 일반사항\n\n### 제1장 공사개요\n\n본 공사는 배관 서포트 제작 및 설치를 포함한다.\n\n### 제2장 시공범위\n\n- 배관 서포트 제작\n- 현장 설치\n- 도장 공사\n\n## 제2편 내역서\n\n| 품명 | 규격 | 수량 | 단가 | 금액 |\n|------|------|------|------|------|\n| PIPE | 6\" SCH40 | 10 | 12,000 | 120,000 |\n| ELBOW | 6\" 90° | 4 | 8,000 | 32,000 |\n| [주] 상기 단가는 부가세 별도 | | | | |\n\n합계: 152,000원",
+    "tables": [],
+    "notes": [],
+    "conditions": [],
+    "cross_references": [],
+    "revision_year": "",
+    "unit_basis": ""
+  }
+]

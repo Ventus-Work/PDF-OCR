@@ -25,8 +25,8 @@ build/
 # Node
 node_modules/
 
-# 출력/로그
-output/
+# 출력/로그 (ps-docparser 런타임 출력 폴더만, golden/ 하위는 제외)
+ps-docparser/output/
 *.log
 
 # Google Drive 동기화 충돌 파일

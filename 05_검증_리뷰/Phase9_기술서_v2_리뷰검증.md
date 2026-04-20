@@ -268,14 +268,31 @@ pytest --tb=short -q 2>&1 | tail -30
 ### 5.5 (c) 실행 결과 기록
 
 ```
-실행 일시:       2026-04-20 (실측 완료)
-pytest 요약:     112 collected / 112 passed / 0 failed / 0 skipped / 0 errors
-gap 9개 분류:    수치 오류 (정상)
-                 - 문서 코드 상의 `def test_` 선언 갯수가 103개인 것은 맞음.
-                 - 단, `@pytest.mark.parametrize` 등에 의해 파라미터화되어 pytest 런타임에 수집/실행되는 독립 테스트 항목은 실제 112개가 맞음.
-실패 테스트 목록: 없음 (전 항목 통과, 기능 이상 0)
-조치 내역:       누락이나 파괴가 아님을 실측 증명 완료. 기술서 v2.1의 예상(112)이 정확함.
-최종 통과 수:    112개
+실행 일시:       2026-04-20
+실행 명령:       python -m pytest tests/unit/ -p no:capture --tb=short
+환경:            Python 3.14.0 / pytest-8.4.2 / Windows 11
+
+pytest 결과:     102 passed in 1.77s (failed=0 / skipped=0 / errors=0)
+
+gap 9개 분류:    수치 오류 (기술서 기록값이 틀림)
+  원인 ①  tests/unit/ 내 def test_ 함수 93개
+           → @pytest.mark.parametrize 확장 후 실 케이스 102개
+  원인 ②  tests/integration/ 파일들은 비표준 커스텀 test() 함수 형식
+           → pytest에 0 collected (pytest가 수집 불가)
+           → 기술서의 "112개" 산출 시 이 파일들을 수동 집계에 포함한 것으로 추정
+  원인 ③  Python 3.14 + pytest capture 모듈 충돌 버그
+           → pytest를 그냥 실행 시 0 collected (capture.py ValueErrror)
+           → -p no:capture 우회 옵션으로 정상 실행 가능
+
+실패 테스트:     없음 (기능 파괴 0건)
+최종 통과 수:    102개 (unit 테스트 기준, pytest 실측)
+기술서 수정 필요: v2.1의 "112개 통과" → "102개 통과"로 교정 필요 (기술서 §3.5, §4.5 등)
+
+Golden 파일 상태 (2026-04-20 확정):
+  estimate: 20260420_estimate.json (12,019B) / .md (7,039B) / .xlsx (5,834B) ✅
+  generic:  20260420_generic.json (867B) ✅
+  bom:      제외 — golden/input/bom.pdf가 품셈 기준서(공통부문)로 판명, BOM 구조 없음
+  pumsem:   제외 — 적합한 샘플 PDF 미확보
 ```
 
 ### 5.6 (a) / (b) 착수 게이트
@@ -298,11 +315,13 @@ gap 9개 분류:    수치 오류 (정상)
 
 ### 🟢 Phase 9 실행 전 (선행 필수)
 
-0. [x] **§5 Step 0 실행** — 테스트 수치 gap 추적 완료 (파라미터 증식에 의한 정상 수치)
+0. [x] **§5 Step 0 실행** — 테스트 수치 gap 추적 완료 (실측: unit 102개 통과, §5.5 참조)
 1. ✅ **v2.1 기술서 확정** — 완료 (2026-04-17)
-2. [x] `tests/golden/input/` 에 샘플 PDF 4종 수집 (estimate / bom / pumsem / generic)
-3. [x] 현재 Phase 8 상태로 Golden File 생성 (§6.2 명령 실행)
-4. [x] `git tag phase9-baseline` — Phase 8 종단 태그 확보
+2. [x] `tests/golden/input/` 샘플 수집 — **2종 확정** (estimate.pdf, generic.md)
+         bom/pumsem 제외: 적합한 PDF 미확보 (§5.5 사유 참조)
+3. [x] 현재 Phase 8 상태로 Golden File 생성
+         estimate: json/md/xlsx 3종 ✅ / generic: json 1종 ✅
+4. [x] `git tag phase9-baseline` — 재조정 완료 (2026-04-20 커밋 기준)
 
 ### 🟢 Phase 9 Step 1 착수 시
 
