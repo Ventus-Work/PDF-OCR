@@ -20,6 +20,8 @@ import json
 import re
 from pathlib import Path
 
+from .types import ParsedSection
+
 
 # ══════════════════════════════════════════════════════════
 # ps-docparser 마커 포맷 정규식 (범용 — 프리셋 무관)
@@ -266,7 +268,7 @@ def split_sections(
     source_file: str,
     toc: dict,
     reverse_map: dict,
-) -> list[dict]:
+) -> list[ParsedSection]:
     """
     마크다운 텍스트를 SECTION/PAGE/CONTEXT 마커 기준으로 섹션 단위로 분할한다.
 

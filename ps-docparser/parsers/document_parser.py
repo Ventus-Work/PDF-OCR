@@ -26,6 +26,7 @@ from pathlib import Path
 from .section_splitter import load_toc, build_reverse_map, split_sections
 from .table_parser import process_section_tables
 from .text_cleaner import process_section_text
+from .types import ParsedSection
 
 
 def parse_markdown(
@@ -33,7 +34,7 @@ def parse_markdown(
     toc_path: str = None,
     type_keywords: dict = None,
     patterns: dict = None,
-) -> list[dict]:
+) -> list[ParsedSection]:
     """
     마크다운 텍스트를 구조화된 JSON(섹션 리스트)으로 변환한다.
 
