@@ -1,0 +1,6 @@
+<!-- captured: 2026-01-01T00:00:00Z | engine: local pdfplumber | masked -->
+<table>
+<tr><th>명 칭</th><th>규 격</th><th>수량</th><th>단위</th><th>금 액</th></tr>
+<tr><td>파이프 서포트</td><td>150A × 200L</td><td>4</td><td>EA</td><td>1,000,000</td></tr>
+<tr><td>앵커 볼트</td><td>M16 × 100</td><td>8</td><td>EA</td><td>200,000</td></tr>
+</table>

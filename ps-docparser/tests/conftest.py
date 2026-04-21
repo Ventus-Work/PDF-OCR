@@ -111,3 +111,21 @@ def pytest_collection_modifyitems(config, items):
 def pytest_addoption(parser):
     parser.addoption("--run-api", action="store_true", help="실제 API 호출 테스트 실행")
     parser.addoption("--run-slow", action="store_true", help="느린 테스트 실행")
+
+
+# ──────────────────────────────────────────────
+# Mock 응답 픽스처 (Step 2)
+# ──────────────────────────────────────────────
+
+@pytest.fixture(scope="session")
+def mock_responses_dir(fixtures_dir: Path) -> Path:
+    return fixtures_dir / "mock_responses"
+
+
+@pytest.fixture
+def load_mock(mock_responses_dir: Path):
+    """경로 표기법: 'gemini/extract_table_success.html'"""
+    def _load(relative_path: str) -> str:
+        path = mock_responses_dir / relative_path
+        return path.read_text(encoding="utf-8")
+    return _load

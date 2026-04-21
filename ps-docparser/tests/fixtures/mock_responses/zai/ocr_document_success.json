@@ -1,0 +1,30 @@
+[
+  {
+    "page_num": 1,
+    "text": "BILL OF MATERIALS\n\n| S/N | SIZE | MATERIAL | Q'TY | WT(KG) |\n|-----|------|----------|------|--------|\n| 1   | 150A | SS400    | 4    | 12.5   |\n| 2   | 100A | SS400    | 8    | 6.2    |\n| 3   | 80A  | SS304    | 2    | 2.1    |\n\nTOTAL WEIGHT: 77.2 KG",
+    "layout_details": [
+      {"type": "table", "bbox": [50, 120, 550, 280]},
+      {"type": "text",  "bbox": [50, 290, 550, 310]}
+    ],
+    "input_tokens": 800,
+    "output_tokens": 350
+  },
+  {
+    "page_num": 2,
+    "text": "일반 사항\n\n1. 재질: KS SS400\n2. 도장: 에폭시 프라이머 1회, 에폭시 도장 2회\n3. 용접: 완전 용입 맞대기 용접\n4. 검사: 육안 검사 및 치수 검사",
+    "layout_details": [
+      {"type": "text", "bbox": [50, 80, 550, 400]}
+    ],
+    "input_tokens": 400,
+    "output_tokens": 180
+  },
+  {
+    "page_num": 3,
+    "text": "LINE LIST\n\n| LINE NO | SIZE | FROM | TO |\n|---------|------|------|----|\n| L-101   | 150A | P-01 | V-01 |\n| L-102   | 100A | P-02 | V-02 |",
+    "layout_details": [
+      {"type": "table", "bbox": [50, 100, 550, 220]}
+    ],
+    "input_tokens": 350,
+    "output_tokens": 150
+  }
+]
