@@ -23,6 +23,7 @@ def _make_ocr_response(texts: list[str]) -> MagicMock:
     return resp
 
 
+@pytest.mark.slow
 class TestMistralEngineInit:
     def test_supports_flags(self):
         engine = _make_engine()
@@ -30,6 +31,7 @@ class TestMistralEngineInit:
         assert engine.supports_ocr is True
 
 
+@pytest.mark.slow
 class TestMistralEngineOcrDocument:
     def test_success_returns_all_pages(self, tmp_path: Path):
         engine = _make_engine()
@@ -81,6 +83,7 @@ class TestMistralEngineOcrDocument:
         engine._client.ocr.process.assert_not_called()
 
 
+@pytest.mark.slow
 class TestMistralEngineOcrImage:
     def test_concatenates_pages(self):
         engine = _make_engine()
