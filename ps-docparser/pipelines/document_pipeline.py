@@ -24,7 +24,19 @@ class DocumentPipeline(BasePipeline):
         preset = args.preset
         is_md_input = input_path.suffix.lower() == ".md"
 
-        # 0. 엔진 제약 검증
+        # 0-a. .md 입력 + --output md 조합 금지 (Phase 1 전용 옵션)
+        if is_md_input and args.output_format == "md":
+            raise ParserError(
+                ".md 파일 입력 시 --output json 을 사용하세요. "
+                "--output md 는 Phase 1(PDF→MD) 전용입니다."
+            )
+
+        # 0-b. --text-only + json/excel 안내
+        if getattr(args, "text_only", False) and args.output_format in ("json", "excel"):
+            print("  [참고] --text-only와 --output json/excel 병용: "
+                  "텍스트 전용으로 추출한 뒤 파싱합니다.")
+
+        # 0-c. 엔진 제약 검증
         self._validate_engine(args.engine)
 
         # 1. 프리셋 리소스 로딩

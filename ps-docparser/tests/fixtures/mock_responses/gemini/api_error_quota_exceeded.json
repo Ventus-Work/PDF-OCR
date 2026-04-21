@@ -1,0 +1,18 @@
+{
+  "error": {
+    "code": 429,
+    "message": "Resource exhausted: quota exceeded for quota metric 'generate_content_requests' and limit 'generate_content_requests_per_minute_per_project_per_base_model'",
+    "status": "RESOURCE_EXHAUSTED",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+        "violations": [
+          {
+            "quotaMetric": "generativelanguage.googleapis.com/generate_content_requests",
+            "description": "Quota exceeded for quota metric"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+[
+  {
+    "page_num": 1,
+    "text": "BILL OF MATERIALS\n\n| S/N | SIZE | MAT'L | Q'TY |\n|-----|------|-------|------|\n| 1   | 150A | SS400 | 4    |\n| 2   | 100A | SS400 | 8    |\n\nTOTAL: 12 EA",
+    "layout_details": [
+      {"type": "table", "bbox": [48, 130, 545, 260]}
+    ],
+    "input_tokens": 600,
+    "output_tokens": 280
+  }
+]

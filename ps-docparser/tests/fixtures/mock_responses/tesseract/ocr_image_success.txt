@@ -1,0 +1,5 @@
+<!-- captured: 2026-01-01T00:00:00Z | engine: tesseract 5.x | masked -->
+PIPE SUPPORT
+SIZE: 150A
+MATERIAL: SS400
+QUANTITY: 4 EA
