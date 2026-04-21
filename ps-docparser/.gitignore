@@ -23,6 +23,9 @@ build/
 # 출력 파일 (루트 output/ 만 제외, tests/golden/output/ 제외 안 함)
 /output/
 
+# 골든 테스트 산출물 (테스트 러닝마다 자동 생성)
+tests/golden/test_output/
+
 # 통합 테스트 산출물 (test_file_collision.py 등 생성)
 conflict_dir/
 readonly_dir/
