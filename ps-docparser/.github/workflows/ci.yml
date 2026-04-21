@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "develop"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11", "3.12", "3.13"]
+
+    runs-on: ${{ matrix.os }}
+    name: Test (Python ${{ matrix.python }} / ${{ matrix.os }})
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: "pip"
+
+      # ── OS별 Poppler 설치 ──────────────────────────────────────
+      - name: Install Poppler (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils tesseract-ocr
+
+      - name: Install Poppler (macOS)
+        if: runner.os == 'macOS'
+        run: brew install poppler tesseract
+
+      - name: Install Poppler (Windows)
+        if: runner.os == 'Windows'
+        run: choco install poppler --no-progress -y
+        shell: pwsh
+
+      # ── 의존성 설치 ───────────────────────────────────────────
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      # ── 테스트 실행 (API 호출 없음) ───────────────────────────
+      # Why --run-slow 제외: AI API가 필요한 slow 테스트는 CI에서 실행 불가
+      - name: Run tests
+        run: pytest -q --tb=short --cov=. --cov-report=xml --cov-report=term-missing
+        env:
+          # API 키 미설정 → 엔진 테스트는 Mock으로만 동작
+          GEMINI_API_KEY: ""
+          ZAI_API_KEY: ""
+          MISTRAL_API_KEY: ""
+          CACHE_ENABLED: "false"
+
+      # ── Codecov 업로드 (Ubuntu + Python 3.12 기준) ───────────
+      - name: Upload coverage to Codecov
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  lint:
+    runs-on: ubuntu-latest
+    name: Lint (ruff)
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install ruff
+        run: pip install ruff>=0.5.0
+
+      - name: Run ruff check
+        run: ruff check .
+
+      - name: Run ruff format check
+        run: ruff format --check .
