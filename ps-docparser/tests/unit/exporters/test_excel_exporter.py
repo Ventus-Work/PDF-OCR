@@ -185,3 +185,97 @@ class TestExcelExporterExport:
         ExcelExporter().export([section], out)
         wb = openpyxl.load_workbook(out)
         assert "조건" in wb.sheetnames
+
+
+# ─────────────────────────────────────────────────────────────
+# Phase 12.5 통합 테스트
+# ─────────────────────────────────────────────────────────────
+
+_PUMSEM_SECTION = {
+    "section_id": "1-1-1",
+    "title": "일반사항",
+    "department": "공통부문",
+    "chapter": "제1장",
+    "page": 5,
+    "clean_text": "본 품셈은 기준이다.",
+    "tables": [],
+    "notes": ["주석1"],
+    "conditions": [{"type": "가산", "condition": "야간", "rate": "25%"}],
+    "cross_references": [{"target_section_id": "2-1", "target_chapter": "제2장", "context": "준용"}],
+    "revision_year": "2024",
+    "unit_basis": "m³당",
+}
+
+_BOM_SECTION = {
+    "section_id": "BOM-1",
+    "title": "BOM",
+    "department": None,
+    "chapter": None,
+    "page": 1,
+    "clean_text": "",
+    "tables": [{"headers": ["NO", "DESC"], "rows": [{"NO": "1", "DESC": "파이프"}],
+                "type": "generic", "title": ""}],
+    "notes": [],
+    "conditions": [],
+    "cross_references": [],
+    "revision_year": None,
+    "unit_basis": None,
+}
+
+
+class TestPhase125Integration:
+    def test_pumsem_sample_sheets_present(self, tmp_path: Path):
+        import openpyxl
+        out = tmp_path / "pumsem.xlsx"
+        ExcelExporter().export([_PUMSEM_SECTION], out)
+        names = openpyxl.load_workbook(out).sheetnames
+        for expected in ["본문", "주석", "가감산_조건", "교차참조", "메타데이터"]:
+            assert expected in names, f"'{expected}' 시트 없음: {names}"
+
+    def test_bom_sample_no_new_sheets(self, tmp_path: Path):
+        import openpyxl
+        out = tmp_path / "bom.xlsx"
+        ExcelExporter().export([_BOM_SECTION], out)
+        names = openpyxl.load_workbook(out).sheetnames
+        for unexpected in ["본문", "주석", "가감산_조건", "교차참조", "메타데이터"]:
+            assert unexpected not in names, f"BOM 모드에 '{unexpected}' 시트 생성됨"
+
+    def test_empty_fields_no_new_sheets(self, tmp_path: Path):
+        import openpyxl
+        empty = {"section_id": "e", "title": "", "department": "", "chapter": "",
+                 "page": 0, "clean_text": "", "tables": [], "notes": [],
+                 "conditions": [], "cross_references": [],
+                 "revision_year": "", "unit_basis": ""}
+        out = tmp_path / "empty.xlsx"
+        ExcelExporter().export([empty], out)
+        names = openpyxl.load_workbook(out).sheetnames
+        for unexpected in ["본문", "주석", "가감산_조건", "교차참조", "메타데이터"]:
+            assert unexpected not in names
+
+    def test_partial_fields_partial_sheets(self, tmp_path: Path):
+        import openpyxl
+        section = dict(_PUMSEM_SECTION,
+                       clean_text="", conditions=[], cross_references=[],
+                       revision_year="", unit_basis="",
+                       notes=["주석만"])
+        out = tmp_path / "partial.xlsx"
+        ExcelExporter().export([section], out)
+        names = openpyxl.load_workbook(out).sheetnames
+        assert "주석" in names
+        for unexpected in ["본문", "가감산_조건", "교차참조", "메타데이터"]:
+            assert unexpected not in names, f"'{unexpected}' 시트가 생성됨"
+
+    def test_sheet_order(self, tmp_path: Path):
+        import openpyxl
+        section = dict(_PUMSEM_SECTION, tables=[
+            {"headers": ["명 칭", "금 액"], "rows": [], "type": "estimate", "title": "견적"},
+        ])
+        out = tmp_path / "order.xlsx"
+        ExcelExporter().export([section], out)
+        names = openpyxl.load_workbook(out).sheetnames
+        # 견적서가 본문보다 앞에 있어야 함
+        if "견적서" in names and "본문" in names:
+            assert names.index("견적서") < names.index("본문")
+        # 본문이 주석보다 앞에
+        if "본문" in names and "주석" in names:
+            assert names.index("본문") < names.index("주석")

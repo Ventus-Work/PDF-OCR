@@ -49,6 +49,11 @@ from exporters.excel_builders import (
     _build_detail_sheet,
     _build_condition_sheet,
     _build_generic_sheet,
+    _build_text_sheet,
+    _build_notes_sheet,
+    _build_conditions_sheet,
+    _build_crossref_sheet,
+    _build_meta_sheet,
 )
 from exporters.base_exporter import BaseExporter
 
@@ -67,6 +72,8 @@ __all__ = [
     "_DETAIL_HEADER_GROUPS",
     "_build_estimate_sheet", "_build_detail_sheet",
     "_build_condition_sheet", "_build_generic_sheet",
+    "_build_text_sheet", "_build_notes_sheet", "_build_conditions_sheet",
+    "_build_crossref_sheet", "_build_meta_sheet",
     # orchestration (this module)
     "_export_impl", "export", "ExcelExporter",
 ]
@@ -152,6 +159,36 @@ def _export_impl(
         ws_cond.sheet_view.showGridLines = False
         _build_condition_sheet(ws_cond, condition_tables[0])
 
+    # ── 본문 시트 (Phase 12.5) ──
+    if any(s.get("clean_text", "").strip() for s in sections):
+        ws_txt = wb.create_sheet("본문")
+        ws_txt.sheet_view.showGridLines = False
+        _build_text_sheet(ws_txt, sections)
+
+    # ── 주석 시트 ──
+    if any(s.get("notes") for s in sections):
+        ws_notes = wb.create_sheet("주석")
+        ws_notes.sheet_view.showGridLines = False
+        _build_notes_sheet(ws_notes, sections)
+
+    # ── 가감산 조건 시트 ──
+    if any(s.get("conditions") for s in sections):
+        ws_conds = wb.create_sheet("가감산_조건")
+        ws_conds.sheet_view.showGridLines = False
+        _build_conditions_sheet(ws_conds, sections)
+
+    # ── 교차참조 시트 ──
+    if any(s.get("cross_references") for s in sections):
+        ws_xref = wb.create_sheet("교차참조")
+        ws_xref.sheet_view.showGridLines = False
+        _build_crossref_sheet(ws_xref, sections)
+
+    # ── 메타 시트 ──
+    if any((s.get("revision_year") or s.get("unit_basis")) for s in sections):
+        ws_meta = wb.create_sheet("메타데이터")
+        ws_meta.sheet_view.showGridLines = False
+        _build_meta_sheet(ws_meta, sections)
+
     # ── 범용 시트 (분류 불가 테이블) [수정 B] ──
     if generic_tables:
         for i, tbl in enumerate(generic_tables, start=1):
@@ -170,11 +207,19 @@ def _export_impl(
             ws_gen.sheet_view.showGridLines = False
             _build_generic_sheet(ws_gen, tbl)
 
-    # ── 분류된 테이블이 하나도 없을 때 ── 원시 덤프
-    if not estimate_tables and not detail_tables and not condition_tables and not generic_tables:
+    # ── 분류된 테이블/필드가 하나도 없을 때 ── 원시 덤프
+    has_any_legacy = estimate_tables or detail_tables or condition_tables or generic_tables
+    has_any_new = (
+        any(s.get("clean_text", "").strip() for s in sections)
+        or any(s.get("notes") for s in sections)
+        or any(s.get("conditions") for s in sections)
+        or any(s.get("cross_references") for s in sections)
+        or any((s.get("revision_year") or s.get("unit_basis")) for s in sections)
+    )
+    if not has_any_legacy and not has_any_new:
         ws_raw = wb.create_sheet("데이터")
         ws_raw.cell(row=1, column=1,
-                    value="⚠ 분류 가능한 테이블이 없습니다. JSON을 확인하세요.")
+                    value="⚠ 분류 가능한 데이터가 없습니다.")
         ws_raw.cell(row=1, column=1).font = Font(color="FF0000", bold=True)
 
     output_path = Path(output_path)

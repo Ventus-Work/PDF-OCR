@@ -380,3 +380,140 @@ def _build_generic_sheet(ws, table: dict):
             val_len = sum(2 if ord(c) > 127 else 1 for c in val)
             width = max(width, val_len + 2)
         ws.column_dimensions[get_column_letter(col_idx)].width = min(width, 50)
+
+
+# ═══════════════════════════════════════════════════════
+# Phase 12.5 신규 빌더 — 본문 / 주석 / 가감산_조건 / 교차참조 / 메타데이터
+# ═══════════════════════════════════════════════════════
+
+def _build_text_sheet(ws, sections: list[dict]) -> None:
+    """섹션별 clean_text를 행 단위로 덤프."""
+    headers = ["섹션 ID", "부문", "장", "제목", "페이지", "본문"]
+    widths  = [12, 14, 20, 28, 7, 80]
+
+    for col_idx, (h, w) in enumerate(zip(headers, widths), start=1):
+        cell = ws.cell(row=1, column=col_idx, value=h)
+        _apply_style(cell, fill=_FILL_HEADER, font=_FONT_HEADER,
+                     align=_ALIGN_CENTER, border=_BORDER_ALL)
+        ws.column_dimensions[get_column_letter(col_idx)].width = w
+    ws.row_dimensions[1].height = 18
+
+    for row_idx, s in enumerate(sections, start=2):
+        text = s.get("clean_text", "").strip()
+        if not text:
+            continue
+        vals = [
+            s.get("section_id", ""), s.get("department", ""),
+            s.get("chapter", ""), s.get("title", ""),
+            s.get("page", ""), text,
+        ]
+        for col_idx, v in enumerate(vals, start=1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=v)
+            align = _ALIGN_LEFT if col_idx == 6 else _ALIGN_CENTER
+            _apply_style(cell, font=_FONT_BODY, align=align, border=_BORDER_ALL)
+
+
+def _build_notes_sheet(ws, sections: list[dict]) -> None:
+    """모든 섹션의 notes를 평탄화하여 통합."""
+    headers = ["섹션 ID", "섹션 제목", "페이지", "주석 번호", "주석 내용"]
+    widths  = [12, 28, 7, 8, 80]
+
+    for col_idx, (h, w) in enumerate(zip(headers, widths), start=1):
+        cell = ws.cell(row=1, column=col_idx, value=h)
+        _apply_style(cell, fill=_FILL_HEADER, font=_FONT_HEADER,
+                     align=_ALIGN_CENTER, border=_BORDER_ALL)
+        ws.column_dimensions[get_column_letter(col_idx)].width = w
+    ws.row_dimensions[1].height = 18
+
+    row_idx = 2
+    for s in sections:
+        notes = s.get("notes", [])
+        if not notes:
+            continue
+        for note_num, note in enumerate(notes, start=1):
+            vals = [s.get("section_id", ""), s.get("title", ""),
+                    s.get("page", ""), note_num, note]
+            for col_idx, v in enumerate(vals, start=1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=v)
+                align = _ALIGN_LEFT if col_idx == 5 else _ALIGN_CENTER
+                _apply_style(cell, font=_FONT_BODY, align=align, border=_BORDER_ALL)
+            row_idx += 1
+
+
+def _build_conditions_sheet(ws, sections: list[dict]) -> None:
+    """JSON conditions[]의 {type,condition,rate} dict를 표로 펼침."""
+    headers = ["섹션 ID", "섹션 제목", "페이지", "유형", "조건", "비율"]
+    widths  = [12, 28, 7, 10, 50, 10]
+
+    for col_idx, (h, w) in enumerate(zip(headers, widths), start=1):
+        cell = ws.cell(row=1, column=col_idx, value=h)
+        _apply_style(cell, fill=_FILL_HEADER, font=_FONT_HEADER,
+                     align=_ALIGN_CENTER, border=_BORDER_ALL)
+        ws.column_dimensions[get_column_letter(col_idx)].width = w
+    ws.row_dimensions[1].height = 18
+
+    row_idx = 2
+    for s in sections:
+        for cond in s.get("conditions", []):
+            vals = [
+                s.get("section_id", ""), s.get("title", ""), s.get("page", ""),
+                cond.get("type", ""), cond.get("condition", ""), cond.get("rate", ""),
+            ]
+            for col_idx, v in enumerate(vals, start=1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=v)
+                align = _ALIGN_LEFT if col_idx == 5 else _ALIGN_CENTER
+                _apply_style(cell, font=_FONT_BODY, align=align, border=_BORDER_ALL)
+            row_idx += 1
+
+
+def _build_crossref_sheet(ws, sections: list[dict]) -> None:
+    """JSON cross_references[]의 {target_section_id,target_chapter,context}를 표로."""
+    headers = ["원본 섹션 ID", "원본 섹션 제목", "페이지", "대상 장", "대상 섹션 ID", "참조 문맥"]
+    widths  = [12, 28, 7, 14, 14, 60]
+
+    for col_idx, (h, w) in enumerate(zip(headers, widths), start=1):
+        cell = ws.cell(row=1, column=col_idx, value=h)
+        _apply_style(cell, fill=_FILL_HEADER, font=_FONT_HEADER,
+                     align=_ALIGN_CENTER, border=_BORDER_ALL)
+        ws.column_dimensions[get_column_letter(col_idx)].width = w
+    ws.row_dimensions[1].height = 18
+
+    row_idx = 2
+    for s in sections:
+        for ref in s.get("cross_references", []):
+            vals = [
+                s.get("section_id", ""), s.get("title", ""), s.get("page", ""),
+                ref.get("target_chapter", ""), ref.get("target_section_id", ""),
+                ref.get("context", ""),
+            ]
+            for col_idx, v in enumerate(vals, start=1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=v)
+                align = _ALIGN_LEFT if col_idx == 6 else _ALIGN_CENTER
+                _apply_style(cell, font=_FONT_BODY, align=align, border=_BORDER_ALL)
+            row_idx += 1
+
+
+def _build_meta_sheet(ws, sections: list[dict]) -> None:
+    """섹션별 revision_year / unit_basis를 통합."""
+    headers = ["섹션 ID", "섹션 제목", "페이지", "보완연도", "단위 기준"]
+    widths  = [12, 28, 7, 10, 14]
+
+    for col_idx, (h, w) in enumerate(zip(headers, widths), start=1):
+        cell = ws.cell(row=1, column=col_idx, value=h)
+        _apply_style(cell, fill=_FILL_HEADER, font=_FONT_HEADER,
+                     align=_ALIGN_CENTER, border=_BORDER_ALL)
+        ws.column_dimensions[get_column_letter(col_idx)].width = w
+    ws.row_dimensions[1].height = 18
+
+    row_idx = 2
+    for s in sections:
+        rev  = s.get("revision_year") or ""
+        unit = s.get("unit_basis") or ""
+        if not rev and not unit:
+            continue
+        vals = [s.get("section_id", ""), s.get("title", ""), s.get("page", ""), rev, unit]
+        for col_idx, v in enumerate(vals, start=1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=v)
+            _apply_style(cell, font=_FONT_BODY,
+                         align=_ALIGN_CENTER, border=_BORDER_ALL)
+        row_idx += 1
