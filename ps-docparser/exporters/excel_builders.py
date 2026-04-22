@@ -517,3 +517,78 @@ def _build_meta_sheet(ws, sections: list[dict]) -> None:
             _apply_style(cell, font=_FONT_BODY,
                          align=_ALIGN_CENTER, border=_BORDER_ALL)
         row_idx += 1
+
+
+# ═══════════════════════════════════════════════════════
+# Phase 14 신규 빌더 — 도면 메타데이터
+# ═══════════════════════════════════════════════════════
+
+_DRAWING_META_FIELD_ORDER = [
+    "dwg_no", "rev", "title", "date", "project", "client", 
+    "contractor", "drawn_by", "checked_by", "approved_by", "scale", "sheet"
+]
+
+_DRAWING_META_LABELS = {
+    "dwg_no": "DWG NO.",
+    "rev": "REV.",
+    "title": "TITLE",
+    "date": "DATE",
+    "project": "PROJECT",
+    "client": "CLIENT",
+    "contractor": "CONTRACTOR",
+    "drawn_by": "DRAWN BY",
+    "checked_by": "CHECKED BY",
+    "approved_by": "APPROVED BY",
+    "scale": "SCALE",
+    "sheet": "SHEET",
+}
+
+def _build_drawing_meta_sheet(ws, drawing_metadata: dict) -> None:
+    """
+    도면 메타데이터 시트를 수직 형태로 기록한다.
+    
+    A열: 필드명, B열: 값
+    """
+    if not drawing_metadata:
+        return
+
+    # ── 제목 셀 ──
+    ws.merge_cells("A1:B1")
+    title_cell = ws.cell(row=1, column=1, value="도면 메타데이터")
+    _apply_style(title_cell, fill=_FILL_TITLE, font=_FONT_TITLE,
+                 align=_ALIGN_CENTER, border=_BORDER_HEADER)
+    ws.row_dimensions[1].height = 28
+
+    # ── 헤더 행 ──
+    headers = ["필드", "내용"]
+    for col_idx, h in enumerate(headers, start=1):
+        cell = ws.cell(row=2, column=col_idx, value=h)
+        _apply_style(cell, fill=_FILL_HEADER, font=_FONT_HEADER,
+                     align=_ALIGN_CENTER, border=_BORDER_ALL)
+    ws.row_dimensions[2].height = 20
+
+    # ── 데이터 행 ──
+    row_idx = 3
+    for key in _DRAWING_META_FIELD_ORDER:
+        val = drawing_metadata.get(key)
+        if val is None:
+            continue
+            
+        label = _DRAWING_META_LABELS.get(key, key.upper())
+        
+        # A열: 필드명
+        cell_a = ws.cell(row=row_idx, column=1, value=label)
+        _apply_style(cell_a, fill=_FILL_SECTION, font=_FONT_BODY,
+                     align=_ALIGN_CENTER, border=_BORDER_ALL)
+                     
+        # B열: 값
+        cell_b = ws.cell(row=row_idx, column=2, value=val)
+        _apply_style(cell_b, font=_FONT_BODY,
+                     align=_ALIGN_LEFT, border=_BORDER_ALL)
+                     
+        ws.row_dimensions[row_idx].height = 16
+        row_idx += 1
+
+    # ── 열 너비 설정 ──
+    ws.column_dimensions["A"].width = 20
+    ws.column_dimensions["B"].width = 50

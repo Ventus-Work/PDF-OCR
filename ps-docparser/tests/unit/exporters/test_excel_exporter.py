@@ -279,3 +279,28 @@ class TestPhase125Integration:
         # 본문이 주석보다 앞에
         if "본문" in names and "주석" in names:
             assert names.index("본문") < names.index("주석")
+
+    def test_drawing_meta_sheet_created(self, tmp_path: Path):
+        """Phase 14: drawing_meta 타입 섹션이 있으면 '도면_메타' 시트가 생성되어야 함."""
+        import openpyxl
+        section = {
+            "section_id": "DRAWING-META-1",
+            "title": "도면 메타데이터",
+            "type": "drawing_meta",
+            "drawing_metadata": {"dwg_no": "TEST-123", "rev": "A"}
+        }
+        out = tmp_path / "dwg_meta.xlsx"
+        from exporters.excel_exporter import export
+        export([section], out)
+        
+        wb = openpyxl.load_workbook(out)
+        assert "도면_메타" in wb.sheetnames
+        ws = wb["도면_메타"]
+        
+        # 단순히 내용 존재 여부만 체크
+        has_content = False
+        for row in ws.iter_rows(values_only=True):
+            if "TEST-123" in row:
+                has_content = True
+                break
+        assert has_content

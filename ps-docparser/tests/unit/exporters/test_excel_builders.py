@@ -11,6 +11,7 @@ from exporters.excel_builders import (
     _build_conditions_sheet,
     _build_crossref_sheet,
     _build_meta_sheet,
+    _build_drawing_meta_sheet,
 )
 
 
@@ -237,3 +238,39 @@ class TestBuildMetaSheet:
         _build_meta_sheet(ws, bom_minimal_sections)
         rows = list(ws.iter_rows(values_only=True))
         assert len(rows) == 1
+
+
+# ─────────────────────────────────────────────────────────────
+# Phase 14: _build_drawing_meta_sheet
+# ─────────────────────────────────────────────────────────────
+
+class TestBuildDrawingMetaSheet:
+    def test_empty_dict_skipped(self):
+        ws = _ws()
+        _build_drawing_meta_sheet(ws, {})
+        rows = list(ws.iter_rows(values_only=True))
+        assert len(rows) == 0
+
+    def test_none_values_skipped(self):
+        ws = _ws()
+        _build_drawing_meta_sheet(ws, {"dwg_no": None, "rev": None})
+        rows = list(ws.iter_rows(values_only=True))
+        assert len(rows) == 2  # 제목행, 헤더행 (데이터 없음)
+
+    def test_values_rendered(self):
+        ws = _ws()
+        data = {
+            "dwg_no": "ABC-123",
+            "rev": "0",
+            "title": "SUPPORT PLAN",
+            "unknown_field": "test"
+        }
+        _build_drawing_meta_sheet(ws, data)
+        rows = list(ws.iter_rows(values_only=True))
+        
+        # 필드 순서대로 출력되어야 하므로: 제목(1) + 헤더(1) + dwg_no(1) + rev(1) + title(1)
+        # unknown_field는 _DRAWING_META_FIELD_ORDER에 없으므로 무시됨
+        assert len(rows) == 5
+        assert ws.cell(row=3, column=2).value == "ABC-123"
+        assert ws.cell(row=4, column=2).value == "0"
+        assert ws.cell(row=5, column=2).value == "SUPPORT PLAN"

@@ -54,6 +54,7 @@ from exporters.excel_builders import (
     _build_conditions_sheet,
     _build_crossref_sheet,
     _build_meta_sheet,
+    _build_drawing_meta_sheet,
 )
 from exporters.base_exporter import BaseExporter
 
@@ -73,7 +74,7 @@ __all__ = [
     "_build_estimate_sheet", "_build_detail_sheet",
     "_build_condition_sheet", "_build_generic_sheet",
     "_build_text_sheet", "_build_notes_sheet", "_build_conditions_sheet",
-    "_build_crossref_sheet", "_build_meta_sheet",
+    "_build_crossref_sheet", "_build_meta_sheet", "_build_drawing_meta_sheet",
     # orchestration (this module)
     "_export_impl", "export", "ExcelExporter",
 ]
@@ -189,6 +190,13 @@ def _export_impl(
         ws_meta.sheet_view.showGridLines = False
         _build_meta_sheet(ws_meta, sections)
 
+    # ── 도면_메타 시트 (Phase 14) ──
+    drawing_meta_sections = [s for s in sections if s.get("type") == "drawing_meta"]
+    if drawing_meta_sections:
+        ws_dwg_meta = wb.create_sheet("도면_메타")
+        ws_dwg_meta.sheet_view.showGridLines = False
+        _build_drawing_meta_sheet(ws_dwg_meta, drawing_meta_sections[0].get("drawing_metadata", {}))
+
     # ── 범용 시트 (분류 불가 테이블) [수정 B] ──
     if generic_tables:
         for i, tbl in enumerate(generic_tables, start=1):
@@ -215,6 +223,7 @@ def _export_impl(
         or any(s.get("conditions") for s in sections)
         or any(s.get("cross_references") for s in sections)
         or any((s.get("revision_year") or s.get("unit_basis")) for s in sections)
+        or bool(drawing_meta_sections)
     )
     if not has_any_legacy and not has_any_new:
         ws_raw = wb.create_sheet("데이터")
