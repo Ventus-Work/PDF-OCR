@@ -14,6 +14,7 @@ import logging
 from pathlib import Path
 
 from extractors.bom_types import BomExtractionResult
+from extractors.drawing_meta import extract_drawing_meta
 from utils.ocr_utils import pdf_page_to_image
 
 logger = logging.getLogger(__name__)
@@ -127,6 +128,9 @@ def extract_bom_with_retry(
     result = extract_bom_tables(full_text, keywords, layout_details=layout)
     result.raw_text   = full_text
     result.ocr_engine = type(engine).__name__
+    # Phase 14: raw_text가 확정된 이 시점에 도면 메타 추출
+    # Why: 재시도 단계에서 raw_text는 변경되지 않으므로 1차 직후가 유일한 삽입 위치.
+    result.drawing_metadata = extract_drawing_meta(full_text)
 
     # ── 2차: 우측 55% 크롭 (BOM 복구) ──
     if not result.has_bom:
