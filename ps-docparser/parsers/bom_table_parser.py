@@ -121,7 +121,8 @@ def parse_html_bom_tables(
             #      타이틀 행 바로 다음 빈 행으로 밀어버리는 버그를 방지한다.
             single_val = list(unique_vals)[0] if unique_vals else ""
             is_title_row = (
-                len(unique_vals) == 1
+                i < 2  # 타이틀 행은 표 최상단에 위치함 (데이터 중간의 소제목 오인 방지)
+                and len(unique_vals) == 1
                 and next_row_len > len(unique_vals)
                 and not single_val.strip().isdigit()
                 and len(single_val) >= 3
