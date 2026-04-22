@@ -30,6 +30,26 @@ def to_sections(result: BomExtractionResult) -> list[dict]:
     """
     sections = []
 
+    # Phase 14: 도면 메타데이터 섹션 추가
+    has_meta = any(v is not None for v in result.drawing_metadata.values())
+    if has_meta:
+        sections.append({
+            "section_id": "DRAWING-META-1",
+            "title": "도면 메타데이터",
+            "type": "drawing_meta",
+            "department": None,
+            "chapter": None,
+            "page": None,
+            "clean_text": "",
+            "tables": [],
+            "notes": [],
+            "conditions": [],
+            "cross_references": [],
+            "revision_year": None,
+            "unit_basis": None,
+            "drawing_metadata": result.drawing_metadata,
+        })
+
     for i, bom in enumerate(result.bom_sections, 1):
         if not bom.rows:
             continue

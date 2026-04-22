@@ -593,3 +593,30 @@ class TestToSections:
         res = BomExtractionResult(bom_sections=[bom])
         tbl = to_sections(res)[0]["tables"][0]
         assert tbl["raw_row_count"] == 10
+
+    def test_drawing_meta_section_added(self):
+        # drawing_metadata가 있을 때 첫 번째 섹션으로 DRAWING-META-1이 추가되어야 함
+        bom = BomSection("bom", ["A"], [["1"]], raw_row_count=1)
+        res = BomExtractionResult(bom_sections=[bom])
+        res.drawing_metadata = {"dwg_no": "KO-001"}
+        
+        sections = to_sections(res)
+        assert len(sections) == 2
+        
+        meta_sec = sections[0]
+        assert meta_sec["section_id"] == "DRAWING-META-1"
+        assert meta_sec["type"] == "drawing_meta"
+        assert meta_sec["drawing_metadata"]["dwg_no"] == "KO-001"
+        
+        bom_sec = sections[1]
+        assert bom_sec["section_id"] == "BOM-1"
+
+    def test_drawing_meta_skipped_if_empty(self):
+        # 모든 값이 None이면 섹션 생성 생략
+        bom = BomSection("bom", ["A"], [["1"]], raw_row_count=1)
+        res = BomExtractionResult(bom_sections=[bom])
+        res.drawing_metadata = {"dwg_no": None, "rev": None}
+        
+        sections = to_sections(res)
+        assert len(sections) == 1
+        assert sections[0]["section_id"] == "BOM-1"
