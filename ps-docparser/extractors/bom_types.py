@@ -1,6 +1,8 @@
 """
 extractors/bom_types.py — BOM 데이터 클래스 정의
 
+Phase 14: drawing_metadata 필드 추가 (BomExtractionResult)
+
 Why: bom_extractor.py ↔ bom_table_parser.py 간 순환 import 방지.
      양쪽 모두 이 파일에서 데이터 클래스를 import한다.
      제3의 모듈에 정의하므로 import 방향이 항상 단방향:
@@ -33,6 +35,9 @@ class BomExtractionResult:
     line_list_sections: list[BomSection] = field(default_factory=list)
     raw_text: str = ""
     ocr_engine: str = ""                   # 사용된 엔진명 (로그용)
+    # Phase 14: 도면 타이틀 블록 메타데이터 (extract_drawing_meta() 결과)
+    # 기본값 빈 dict → positional 호환성 유지, 기존 직접 생성 코드 무수정
+    drawing_metadata: dict = field(default_factory=dict)
 
     @property
     def has_bom(self) -> bool:
