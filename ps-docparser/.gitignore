@@ -29,6 +29,7 @@ tests/golden/test_output/
 # 통합 테스트 산출물 (test_file_collision.py 등 생성)
 conflict_dir/
 readonly_dir/
+dummy_batch/
 log_tail.json
 stats.json
 
@@ -40,6 +41,9 @@ results_slice.txt
 test_results.log
 pytest_*.txt
 pytest_*.log
+dummy_output.xlsx
+test*.pdf
+scratch_test.py
 
 # IDE
 .vscode/
