@@ -531,3 +531,11 @@ class TestProcessSectionTables:
         result = process_section_tables(section)
         assert result["section_id"] == "S-01"
         assert result["title"] == "테스트 섹션"
+
+    def test_table_metadata_includes_source_section_context(self):
+        raw = "<table><tr><th>항목</th></tr><tr><td>값</td></tr></table>"
+        section = self._make_section(raw)
+        result = process_section_tables(section)
+        assert result["tables"][0]["section_title"] == "테스트 섹션"
+        assert result["tables"][0]["chapter"] == "제1장"
+        assert result["tables"][0]["source_section_id"] == "S-01"

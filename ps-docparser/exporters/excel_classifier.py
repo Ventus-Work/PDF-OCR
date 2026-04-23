@@ -11,53 +11,106 @@ Why: Phase 12 Step 12-2 분해 결과물.
 
 import re
 
+from parsers.header_utils import normalize_header_text
+
+_PUMSEM_GENERIC_TYPES = {"A_품셈", "B_규모기준", "C_구분설명"}
+
 
 # ═══════════════════════════════════════════════════════
 # 테이블 분류
 # ═══════════════════════════════════════════════════════
 
 def _classify_table(table: dict) -> str:
-    """
-    headers 패턴으로 테이블 목적을 판별한다.
+    table_type = str(table.get("type", ""))
+    if table_type in _PUMSEM_GENERIC_TYPES:
+        return "generic"
 
-    반환값:
-        "estimate"   견적서 요약 (NO/명 칭/금 액/...)
-        "detail"     내역서 상세 (품명/합계_금액/...)
-        "condition"  조건 (일반사항/특기사항)
-        "generic"    분류 불가 → Table_N 시트로 원본 보존  [수정 A]
+    headers = [
+        normalize_header_text(str(h).strip())
+        for h in table.get("headers", [])
+        if str(h).strip()
+    ]
+    compact_headers = [header.lower().replace(" ", "").replace("\n", "") for header in headers]
+    header_str = " ".join(compact_headers)
+    header_compact = "".join(compact_headers).replace("_", "")
 
-    원본: excel_exporter.py L79~110
-    """
-    headers = [h.lower().replace(" ", "") for h in table.get("headers", [])]
-    header_str = " ".join(headers)
+    row_fragments = []
+    for row in table.get("rows", [])[:3]:
+        if isinstance(row, dict):
+            row_fragments.extend(str(value).strip() for value in row.values())
+        elif isinstance(row, (list, tuple)):
+            row_fragments.extend(str(value).strip() for value in row)
+        else:
+            row_fragments.append(str(row).strip())
+    row_text = "".join(row_fragments).replace(" ", "").lower()
+    combined_text = f"{header_compact}{row_text}"
 
-    # 조건 테이블: 일반사항 또는 특기사항
-    if "일반사항" in header_str or "특기사항" in header_str:
+    condition_keywords = (
+        "일반사항",
+        "특기사항",
+    )
+    if any(keyword in combined_text for keyword in condition_keywords):
         return "condition"
 
-    # 내역서: 품명 + 합계_금액 (복합 헤더)
-    if "품명" in header_str and "합계_금액" in header_str:
+    material_quote_headers = ("no", "품목", "치수", "수량", "단가", "단위", "공급가액")
+    material_quote_hits = sum(1 for keyword in material_quote_headers if keyword in header_compact)
+    if material_quote_hits >= 5:
+        return "generic"
+
+    header_counts: dict[str, int] = {}
+    for header in headers:
+        header_counts[header] = header_counts.get(header, 0) + 1
+
+    has_cost_groups = any(keyword in header_compact for keyword in ("재료비", "노무비", "경비", "합계"))
+    has_ambiguous_cost_headers = has_cost_groups and any(
+        header_counts.get(keyword, 0) > 1 for keyword in ("단가", "금액")
+    )
+    if has_ambiguous_cost_headers:
+        return "generic"
+
+    if "품명" in header_compact and (
+        "합계금액" in header_compact
+        or any(keyword in header_compact for keyword in ("재료비", "노무비", "경비", "합계"))
+    ):
         return "detail"
 
-    # 견적서: 명칭(명 칭) + 금액(금 액)
-    if ("명칭" in header_str or "명 칭" in header_str) and (
-        "금액" in header_str or "금 액" in header_str
+    estimate_keywords = (
+        "명칭",
+        "품명",
+        "규격",
+        "단위",
+        "수량",
+        "단가",
+        "금액",
+        "비고",
+    )
+    estimate_hanja_keywords = (
+        "名稱",
+        "規格",
+        "單位",
+        "數量",
+        "單價",
+        "金額",
+        "備考",
+    )
+    estimate_hits = sum(1 for keyword in estimate_keywords if keyword in header_compact)
+    estimate_hanja_hits = sum(1 for keyword in estimate_hanja_keywords if keyword in header_compact)
+    if estimate_hits >= 4 or estimate_hanja_hits >= 4:
+        return "estimate"
+    if (
+        any(keyword in header_compact for keyword in ("명칭", "품명", "名稱"))
+        and any(keyword in header_compact for keyword in ("금액", "단가", "金額", "單價"))
     ):
         return "estimate"
 
-    # type 힌트로 보조 판별
-    t = table.get("type", "")
-    if t == "D_기타":
+    if table_type == "D_기타" and any(keyword in combined_text for keyword in condition_keywords):
         return "condition"
 
-    # [P3] BOM-specific generic 판별 강화 (최소 2개 이상 키워드 일치 또는 명시적 타입)
     bom_kws = ["dwgno", "size", "mat'l", "q'ty", "description", "mark", "weight"]
     matched_kws = sum(1 for kw in bom_kws if kw in header_str)
-    
-    if t in ("BOM_자재", "BOM_LINE_LIST") or matched_kws >= 2:
+    if table_type in ("BOM_자재", "BOM_LINE_LIST") or matched_kws >= 2:
         return "bom_generic"
 
-    # [수정 A] "unknown" → "generic": 스킵 대신 범용 처리 경로로 전환
     return "generic"
 
 

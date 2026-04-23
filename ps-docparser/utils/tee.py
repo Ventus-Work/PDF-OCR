@@ -23,3 +23,14 @@ class Tee:
     def flush(self):
         for f in self.files:
             f.flush()
+
+    def isatty(self):
+        for f in self.files:
+            file_isatty = getattr(f, "isatty", None)
+            if callable(file_isatty):
+                try:
+                    if file_isatty():
+                        return True
+                except Exception:
+                    continue
+        return False

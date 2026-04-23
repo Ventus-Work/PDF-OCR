@@ -31,6 +31,7 @@ from extractors.table_utils import (
     detect_tables,
     validate_and_fix_table_bboxes,
     crop_table_image,
+    _group_words_by_row,
 )
 from extractors.text_extractor import extract_text_regions_with_positions
 from extractors.pdf_image_loader import PdfImageLoader   # Phase 8: LRU 캐시 로더
@@ -45,6 +46,114 @@ from utils.markers import (
 from config import POPPLER_PATH
 
 logger = logging.getLogger(__name__)
+
+
+def _row_words_to_cells(row_words: list[dict], gap_tol: float = 18.0) -> list[str]:
+    ordered = sorted(row_words, key=lambda word: word["x0"])
+    if not ordered:
+        return []
+
+    cells = [[ordered[0]]]
+    for word in ordered[1:]:
+        if word["x0"] - cells[-1][-1]["x1"] <= gap_tol:
+            cells[-1].append(word)
+        else:
+            cells.append([word])
+
+    return [
+        " ".join(str(item["text"]).strip() for item in cell if str(item["text"]).strip()).strip()
+        for cell in cells
+        if any(str(item["text"]).strip() for item in cell)
+    ]
+
+
+def _extract_local_table_from_bbox(plumber_page, bbox: tuple) -> list[list[str]] | None:
+    def _normalize_local_table_data(table_data: list[list[str]] | None) -> list[list[str]] | None:
+        if not table_data:
+            return None
+
+        header = list(table_data[0])
+        if len(header) != 2:
+            return table_data
+
+        normalized = [header]
+        for row in table_data[1:]:
+            cells = [str(cell).strip() for cell in row if str(cell).strip()]
+            if not cells:
+                continue
+            if len(cells) == 1:
+                normalized.append([cells[0], ""])
+            elif len(cells) == 2:
+                normalized.append(cells)
+            else:
+                normalized.append([" ".join(cells[:-1]).strip(), cells[-1]])
+        return normalized
+
+    def _safe_number(value, default: float = 0.0) -> float:
+        return value if isinstance(value, (int, float)) else default
+
+    page_bbox = getattr(plumber_page, "bbox", None)
+    if not isinstance(page_bbox, (tuple, list)) or len(page_bbox) != 4:
+        page_bbox = (
+            0,
+            0,
+            _safe_number(getattr(plumber_page, "width", 0)),
+            _safe_number(getattr(plumber_page, "height", 0)),
+        )
+    page_x0, page_y0, page_x1, page_y1 = page_bbox
+
+    x0, y0, x1, y1 = bbox
+    x0, x1 = sorted((x0, x1))
+    y0, y1 = sorted((y0, y1))
+
+    if page_x1 <= page_x0 or page_y1 <= page_y0:
+        page_x0, page_y0, page_x1, page_y1 = x0, y0, x1, y1
+
+    safe_bbox = (
+        max(page_x0, x0),
+        max(page_y0, y0),
+        min(page_x1, x1),
+        min(page_y1, y1),
+    )
+
+    if safe_bbox[2] <= safe_bbox[0] or safe_bbox[3] <= safe_bbox[1]:
+        return None
+
+    cropped_page = plumber_page.crop(safe_bbox)
+
+    try:
+        table_data = cropped_page.extract_table()
+    except Exception:
+        table_data = None
+
+    extract_words = getattr(cropped_page, "extract_words", None)
+    word_table_data = None
+    if callable(extract_words):
+        try:
+            words = extract_words(
+                keep_blank_chars=True,
+                x_tolerance=3,
+                y_tolerance=3,
+            )
+        except Exception:
+            words = []
+
+        rows = _group_words_by_row(words, y_tol=3.0)
+        table_rows = []
+        for row_words in rows:
+            cells = _row_words_to_cells(row_words)
+            if not cells:
+                continue
+            if len(cells) >= 2:
+                table_rows.append(cells)
+                continue
+            if table_rows and len(table_rows[0]) == 2:
+                table_rows.append(cells)
+        word_table_data = table_rows if len(table_rows) >= 2 else None
+
+    if word_table_data and (not table_data or len(word_table_data) > len(table_data)):
+        return _normalize_local_table_data(word_table_data)
+    return _normalize_local_table_data(table_data or word_table_data)
 
 
 
@@ -210,10 +319,26 @@ def process_pdf(
                 else:
                     # ── 3b. 이미지 미지원 엔진 (LocalEngine 등) ──
                     print(f"    ℹ️ 이미지 미지원 엔진 → pdfplumber 테이블 직접 파싱")
-                    pdfplumber_tables = plumber_page.extract_tables()
+                    pdfplumber_tables = []
                     elements = extract_text_regions_with_positions(
                         plumber_page, table_bboxes, division_names=division_names
                     )
+                    for t_idx, bbox in enumerate(table_bboxes):
+                        table_data = _extract_local_table_from_bbox(plumber_page, bbox)
+                        if not table_data:
+                            logger.info(
+                                "local table extraction skipped for bbox %s on page %s",
+                                bbox,
+                                page_num,
+                            )
+                            continue
+                        html = engine.extract_table_from_data(table_data, t_idx + 1)
+                        if html:
+                            elements.append({
+                                "y": bbox[1],
+                                "type": "table",
+                                "content": html,
+                            })
                     for t_idx, table_data in enumerate(pdfplumber_tables):
                         html = engine.extract_table_from_data(table_data, t_idx + 1)
                         if html and t_idx < len(table_bboxes):

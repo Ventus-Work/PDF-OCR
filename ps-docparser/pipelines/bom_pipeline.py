@@ -7,6 +7,7 @@
 from pathlib import Path
 
 import config
+from detector import detect_material_quote
 from engines.factory import create_engine
 from pipelines.base import BasePipeline, PipelineContext
 from utils.io import ParserError, _safe_write_text
@@ -72,6 +73,22 @@ class BomPipeline(BasePipeline):
             and not has_meta
             and raw_text_len >= 1000
         )
+
+        looks_like_material_quote = (
+            total_tables == 0
+            and raw_text_len >= 500
+            and detect_material_quote(bom_result.raw_text)
+        )
+
+        if looks_like_material_quote:
+            import logging
+            logger = logging.getLogger(__name__)
+            warning_msg = (
+                "비-BOM 자재 견적표로 보입니다. 현재 문서는 BOM 구조가 아니라 "
+                "document/generic 경로가 더 적합합니다. --preset bom 대신 기본 경로로 다시 실행해보세요."
+            )
+            print(f"     {warning_msg}")
+            logger.warning(warning_msg)
         
         if looks_like_mixed_doc:
             import logging

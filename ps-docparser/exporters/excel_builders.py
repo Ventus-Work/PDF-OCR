@@ -13,6 +13,7 @@ from __future__ import annotations
 from openpyxl.utils import get_column_letter
 
 from exporters.excel_classifier import _is_number, _row_style, _try_parse_number
+from parsers.header_utils import normalize_header_text
 from exporters.excel_styles import (
     _ALIGN_CENTER,
     _ALIGN_LEFT,
@@ -49,6 +50,45 @@ _DETAIL_HEADER_GROUPS = [
     ("합계",   ["합계_단가",   "합계_금액"]),
     ("비고",   ["비고"]),
 ]
+
+_DETAIL_CANONICAL_KEYS = [
+    sub_key
+    for _, sub_keys in _DETAIL_HEADER_GROUPS
+    for sub_key in sub_keys
+]
+
+
+def _canonicalize_detail_header_key(key: str) -> str:
+    return normalize_header_text(str(key).strip())
+
+
+def _build_detail_alias_map(headers: list[str], rows: list[dict]) -> dict[str, str]:
+    alias_map: dict[str, str] = {}
+    candidates: list[str] = list(headers)
+
+    for row in rows[:5]:
+        if isinstance(row, dict):
+            candidates.extend(str(key) for key in row.keys())
+
+    for candidate in candidates:
+        canonical = _canonicalize_detail_header_key(candidate)
+        if canonical in _DETAIL_CANONICAL_KEYS and canonical not in alias_map:
+            alias_map[canonical] = str(candidate)
+
+    return alias_map
+
+
+def _get_detail_row_value(
+    row: dict,
+    canonical_key: str,
+    alias_map: dict[str, str],
+) -> str:
+    actual_key = alias_map.get(canonical_key, canonical_key)
+    if actual_key in row:
+        return str(row.get(actual_key, "")).strip()
+    if canonical_key in row:
+        return str(row.get(canonical_key, "")).strip()
+    return ""
 
 
 # ═══════════════════════════════════════════════════════
@@ -154,31 +194,13 @@ def _build_detail_sheet(ws, table: dict, doc_title: str):
     if not headers:
         return
 
-    # 실제 존재하는 헤더 필터링 (부분 일치 허용)
-    existing = set(headers)
-    active_groups = []
-    for grp, subs in _DETAIL_HEADER_GROUPS:
-        active_subs = []
-        for exact_sub in subs:
-            if exact_sub in existing:
-                active_subs.append(exact_sub)
-            else:
-                # 부분 일치: 키워드로 시작하는 컬럼명 허용
-                for exist_header in existing:
-                    if exist_header.startswith(exact_sub + "_") or exist_header == exact_sub:
-                        active_subs.append(exist_header)
-                        break  # 첫 번째 매칭만 사용
-        if active_subs:
-            active_groups.append((grp, active_subs))
-
-    # 컬럼 순서 결정 (active_groups 기준 평탄화)
-    col_order = []
-    for _, subs in active_groups:
-        col_order.extend(subs)
-
+    alias_map = _build_detail_alias_map(headers, rows)
+    col_order = [sub_key for _, sub_keys in _DETAIL_HEADER_GROUPS for sub_key in sub_keys]
+    active_groups = list(_DETAIL_HEADER_GROUPS)
     total_cols = len(col_order)
-    if total_cols == 0:
-        return  # 매칭되는 헤더가 없으면 처리 불가
+
+    if not alias_map and not rows:
+        return
 
     # ── 문서 제목 행 ──
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=total_cols)
@@ -220,13 +242,13 @@ def _build_detail_sheet(ws, table: dict, doc_title: str):
     ws.row_dimensions[3].height = 18
 
     # ── 데이터 행 ──
-    first_key = col_order[0] if col_order else headers[0]
+    first_key = alias_map.get("품명", headers[0])
     for row_idx, row in enumerate(rows, start=4):
         style = _row_style(row, first_key)
         ws.row_dimensions[row_idx].height = 16
 
         for col_idx, key in enumerate(col_order, start=1):
-            raw_val = str(row.get(key, "")).strip()
+            raw_val = _get_detail_row_value(row, key, alias_map)
             cell = ws.cell(row=row_idx, column=col_idx)
 
             is_money = key.endswith(("_단가", "_금액")) or key == "수량"

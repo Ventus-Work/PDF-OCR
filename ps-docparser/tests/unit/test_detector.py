@@ -2,7 +2,7 @@
 detector.py 단위 테스트.
 """
 import pytest
-from detector import detect_document_type
+from detector import detect_document_type, detect_material_quote, suggest_preset
 
 
 class TestDetectDocumentType:
@@ -47,3 +47,19 @@ class TestDetectDocumentType:
     def test_case_insensitive(self):
         text = "bill of materials\ns/n | q'ty"
         assert detect_document_type(text) == "bom"
+
+    def test_material_quote_detected_but_not_forced_to_bom(self):
+        text = (
+            "건 적 서\n거래처: 피에스산업\n결정금액 132,570,790\n"
+            "No | 품목 | 재질 | 치수 | 수량 | 중량 | 단가 | 단위 | 공급가액 | 메모"
+        )
+        assert detect_material_quote(text) is True
+        assert detect_document_type(text) is None
+
+    def test_material_quote_suggestion_points_to_generic_document_flow(self):
+        text = (
+            "견적서\n거래처\n결정금액\n"
+            "품목 재질 치수 수량 중량 단가 단위 공급가액 메모"
+        )
+        suggestion = suggest_preset(text)
+        assert "document/generic" in suggestion

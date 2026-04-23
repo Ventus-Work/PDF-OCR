@@ -137,6 +137,12 @@ TABLE_BOTTOM_EXTRA_PADDING: int = 40
 # 참고: ZAI_API_KEY는 L43에서 이미 정의됨
 MISTRAL_API_KEY: str | None = os.getenv("MISTRAL_API_KEY")
 
+# Document pipeline OCR fallback settings
+DOCUMENT_OCR_FALLBACK_ORDER: tuple[str, ...] = ("zai", "mistral", "tesseract")
+DOCUMENT_MIN_VISIBLE_CHARS: int = 200
+DOCUMENT_MIN_VISIBLE_CHARS_PER_PAGE: int = 80
+DOCUMENT_MIN_STRUCTURED_CHARS: int = 400
+
 
 def _detect_tesseract_path() -> str | None:
     import shutil
@@ -248,4 +254,3 @@ def validate_config(verbose: bool = True) -> dict:
             logger.error(f"❌ {msg}")
 
     return result
-

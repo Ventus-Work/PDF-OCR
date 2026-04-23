@@ -47,6 +47,41 @@ class TestClassifyTable:
         table = {"rows": []}
         assert _classify_table(table) == "generic"
 
+    def test_condition_by_type_hint(self):
+        table = {"headers": ["X", "Y"], "type": "D_\uae30\ud0c0", "rows": []}
+        assert _classify_table(table) == "generic"
+
+    def test_condition_by_type_hint_with_condition_rows(self):
+        table = {
+            "headers": ["A", "B"],
+            "type": "D_\uae30\ud0c0",
+            "rows": [{"A": "\uc77c\ubc18\uc0ac\ud56d", "B": "\ud2b9\uae30\uc0ac\ud56d"}],
+        }
+        assert _classify_table(table) == "condition"
+
+    def test_estimate_by_hanja_headers(self):
+        table = {
+            "headers": [
+                "\u540d\u7a31",
+                "\u898f\u683c",
+                "\u55ae\u4f4d",
+                "\u6578\u91cf",
+                "\u55ae\u50f9",
+                "\u91d1\u984d",
+                "\u5099\u8003",
+            ],
+            "rows": [],
+        }
+        assert _classify_table(table) == "estimate"
+
+    def test_pumsem_table_types_stay_generic(self):
+        table = {
+            "headers": ["규격", "단위수량"],
+            "rows": [{"규격": "종 목", "단위수량": "비 고"}],
+            "type": "A_품셈",
+        }
+        assert _classify_table(table) == "generic"
+
 
 # ─────────────────────────────────────────────────────────────
 # _try_parse_number
@@ -167,6 +202,26 @@ class TestExcelExporterExport:
         wb = openpyxl.load_workbook(out)
         sheet_names = wb.sheetnames
         assert any("Table" in s or "BOM" in s or s for s in sheet_names)
+
+    def test_generic_pumsem_table_uses_meaningful_sheet_name(self, tmp_path: Path):
+        import openpyxl
+        section = {
+            "title": "53-83 OKOK",
+            "tables": [
+                {
+                    "headers": ["규격", "단위수량"],
+                    "rows": [{"규격": "종 목", "단위수량": "비 고"}],
+                    "type": "A_품셈",
+                    "section_title": "1-2-2 단위표준",
+                    "title": "",
+                }
+            ],
+        }
+        out = tmp_path / "pumsem_generic.xlsx"
+        ExcelExporter().export([section], out)
+        wb = openpyxl.load_workbook(out)
+        assert any("단위표준" in name for name in wb.sheetnames)
+        assert all(not name.startswith("Table") for name in wb.sheetnames if "단위표준" in name)
 
     def test_condition_table_creates_condition_sheet(self, tmp_path: Path):
         import openpyxl

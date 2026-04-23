@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from extractors.hybrid_extractor import process_pdf
+from extractors.hybrid_extractor import _extract_local_table_from_bbox, process_pdf
 
 
 def _patch_common(mocker, *, pages, table_bboxes_per_page, text_regions=None):
@@ -228,3 +228,65 @@ class TestProcessPdfBranches:
         # build_page_marker 는 페이지 번호를 포함한 헤더를 반환한다.
         assert "1" in md and "2" in md
         assert "page1 txt" in md and "page2 txt" in md
+
+
+def _make_word(text: str, x0: float, x1: float, top: float) -> dict:
+    return {"text": text, "x0": x0, "x1": x1, "top": top}
+
+
+class TestExtractLocalTableFromBbox:
+    def test_keeps_single_cell_rows_in_two_column_tables(self):
+        cropped_page = MagicMock()
+        cropped_page.extract_table.return_value = [
+            ["*. general", "*. notes"],
+            ["1. due date", "-vat"],
+        ]
+        cropped_page.extract_words.return_value = [
+            _make_word("*.", 0, 8, 0),
+            _make_word("general", 10, 60, 0),
+            _make_word("*.", 180, 188, 0),
+            _make_word("notes", 190, 230, 0),
+            _make_word("1.", 0, 8, 20),
+            _make_word("due", 10, 30, 20),
+            _make_word("date", 32, 56, 20),
+            _make_word("-vat", 190, 220, 20),
+            _make_word("4.", 0, 8, 40),
+            _make_word("validity", 10, 52, 40),
+            _make_word("one", 54, 74, 40),
+            _make_word("month", 76, 112, 40),
+            _make_word("5.", 0, 8, 60),
+            _make_word("owner", 10, 42, 60),
+            _make_word("kim", 44, 64, 60),
+        ]
+
+        plumber_page = MagicMock()
+        plumber_page.crop.return_value = cropped_page
+
+        table = _extract_local_table_from_bbox(plumber_page, (0, 0, 240, 80))
+
+        assert table == [
+            ["*. general", "*. notes"],
+            ["1. due date", "-vat"],
+            ["4. validity one month", ""],
+            ["5. owner kim", ""],
+        ]
+
+    def test_clamps_bbox_to_page_bounds_before_crop(self):
+        cropped_page = MagicMock()
+        cropped_page.extract_table.return_value = [
+            ["A", "B"],
+            ["1", "2"],
+        ]
+        cropped_page.extract_words.return_value = []
+
+        plumber_page = MagicMock()
+        plumber_page.bbox = (0, 0, 612, 859)
+        plumber_page.crop.return_value = cropped_page
+
+        table = _extract_local_table_from_bbox(
+            plumber_page,
+            (-4.678, 792.943, 612.0, 809.9840000000002),
+        )
+
+        plumber_page.crop.assert_called_once_with((0, 792.943, 612, 809.9840000000002))
+        assert table == [["A", "B"], ["1", "2"]]

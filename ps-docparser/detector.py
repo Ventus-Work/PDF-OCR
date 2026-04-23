@@ -29,10 +29,40 @@ BOM_KEYWORDS = [
     "LINE LIST", "LINE NO",
 ]
 
+MATERIAL_QUOTE_KEYWORDS = [
+    "견적서", "건 적 서", "결정금액", "거래처", "공급가액",
+    "품목", "재질", "치수", "중량", "메모",
+]
+
 # Why: 3→4 상향 — "견적", "노무비" 같은 단어가 아무 문서 도입부에도
 #      등장할 수 있어 오탐 방지를 위해 임계값을 높임.
 THRESHOLD = 4
 THRESHOLD_BOM = 3  # BOM 키워드 매칭 임계값
+THRESHOLD_MATERIAL_QUOTE = 5
+
+
+def detect_material_quote(text: str) -> bool:
+    """
+    자재 견적표 성격의 문서를 판별한다.
+
+    Why:
+        "아연도금강판 견적서"처럼 표 구조는 깔끔하지만 BOM/LINE LIST가 아닌
+        자재 견적표가 있다. 이런 문서를 BOM으로 오해해 빈 결과만 내지 않도록
+        문맥과 헤더 조합을 따로 감지한다.
+    """
+    if not text or not text.strip():
+        return False
+
+    compact = text.replace(" ", "").replace("\n", "")
+    hits = sum(
+        1
+        for keyword in MATERIAL_QUOTE_KEYWORDS
+        if keyword.replace(" ", "") in compact
+    )
+    has_material_header = all(
+        keyword in compact for keyword in ("품목", "치수", "수량", "단가", "공급가액")
+    )
+    return hits >= THRESHOLD_MATERIAL_QUOTE or has_material_header
 
 
 def detect_document_type(text: str) -> str | None:
@@ -57,6 +87,9 @@ def detect_document_type(text: str) -> str | None:
     elif pumsem_score >= THRESHOLD and pumsem_score > estimate_score:
         return "pumsem"
 
+    if detect_material_quote(text):
+        return None
+
     # BOM 키워드: 영문 대우자 통일어 매칭
     text_upper = text.upper()
     bom_score = sum(1 for kw in BOM_KEYWORDS if kw in text_upper)
@@ -72,7 +105,14 @@ def suggest_preset(text: str) -> str:
     if detected == "estimate":
         return "💡 견적서로 감지되었습니다. --preset estimate 를 추가하면 견적서 양식으로 출력됩니다."
     elif detected == "pumsem":
-        return "💡 품셈 문서로 감지되었습니다. --preset pumsem --toc <목차파일> 을 추가하면 품셈 양식으로 출력됩니다."
+        return (
+            "💡 품셈 문서로 감지되었습니다. --preset pumsem 을 추가하면 품셈 양식으로 출력되며, "
+            "--toc <목차파일> 이 있으면 더 정확하게 구조화됩니다."
+        )
     elif detected == "bom":
         return "💡 BOM 도면으로 감지되었습니다. --preset bom --engine zai 를 추가하면 BOM Excel이 생성됩니다."
+    elif detect_material_quote(text):
+        return (
+            "💡 자재 견적표로 보입니다. BOM보다는 기본 document/generic 경로가 적합합니다."
+        )
     return ""

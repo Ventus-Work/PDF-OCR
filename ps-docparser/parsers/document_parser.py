@@ -23,7 +23,12 @@ Dependencies: parsers.section_splitter, parsers.table_parser, parsers.text_clean
 
 from pathlib import Path
 
-from .section_splitter import load_toc, build_reverse_map, split_sections
+from .section_splitter import (
+    load_toc,
+    build_reverse_map,
+    split_sections,
+    split_sections_by_title_patterns,
+)
 from .table_parser import process_section_tables
 from .text_cleaner import process_section_text
 from .types import ParsedSection
@@ -111,6 +116,10 @@ def parse_markdown(
 
     # ── 3. Step 1: 섹션 분할 ──
     raw_sections = split_sections(text, filename, toc, reverse_map)
+
+    # ── pumsem fallback: TOC/SECTION 마커가 없으면 제목 패턴으로 분할 ──
+    if not raw_sections and patterns:
+        raw_sections = split_sections_by_title_patterns(text, filename, patterns)
 
     # ── 마커 없는 문서 폴백 (범용 모드) ──
     # Why: TOC 없이 추출된 범용 문서(견적서, 계약서 등)에는 SECTION 마커가 없다.

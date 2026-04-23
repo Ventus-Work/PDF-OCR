@@ -315,3 +315,62 @@ class TestParseHtmlBomTables:
         # 데이터 행에 두 번째 헤더인 ITEM / SIZE / WEIGHT 가 남아있으면 안 됨
         assert len(bom_sec.rows) == 1
         assert bom_sec.rows[0] == ["PIPE", "100A", "10.5", "5", "EA"]
+
+    def test_two_row_header_is_merged_and_second_header_row_not_emitted_as_data(self, bom_keywords):
+        html = (
+            "<table>"
+            "<tr><th>\uc790\uc7ac\uba85</th><th>\uaddc\uaca9</th><th>\uc790\uc7ac\uc911\ub7c9 [Kg]</th><th>\uc218\ub7c9</th><th>\ub2e8\uc704</th></tr>"
+            "<tr><th>ITEM</th><th>SIZE</th><th>WEIGHT</th><th>QTY</th><th>UNIT</th></tr>"
+            "<tr><td>PIPE</td><td>100A</td><td>10.5</td><td>5</td><td>EA</td></tr>"
+            "</table>"
+        )
+        result = parse_html_bom_tables(html, bom_keywords)
+        assert len(result.bom_sections) == 1
+
+        bom_sec = result.bom_sections[0]
+        assert bom_sec.headers == [
+            "\uc790\uc7ac\uba85_ITEM",
+            "\uaddc\uaca9_SIZE",
+            "\uc790\uc7ac\uc911\ub7c9 [Kg]_WEIGHT",
+            "\uc218\ub7c9_QTY",
+            "\ub2e8\uc704_UNIT",
+        ]
+        assert bom_sec.rows == [["PIPE", "100A", "10.5", "5", "EA"]]
+
+    def test_sparse_html_row_is_right_aligned_to_composite_headers(self, bom_keywords):
+        local_keywords = dict(bom_keywords, noise_row=["TOTAL"])
+        html = (
+            "<table>"
+            "<tr>"
+            "<th rowspan='2'>ITEM</th>"
+            "<th rowspan='2'>DESCRIPTION</th>"
+            "<th rowspan='2'>SIZE</th>"
+            "<th rowspan='2'>MAT'L</th>"
+            "<th rowspan='2'>SCH</th>"
+            "<th rowspan='2'>CLASS</th>"
+            "<th rowspan='2'>ENDS</th>"
+            "<th rowspan='2'>REMARK</th>"
+            "<th rowspan='2'>TAG</th>"
+            "<th colspan='4'>WEIGHT</th>"
+            "<th rowspan='2'>QTY</th>"
+            "<th rowspan='2'>UNIT</th>"
+            "</tr>"
+            "<tr><th>UNIT</th><th>LOSS</th><th>TOTAL</th><th>KG</th></tr>"
+            "<tr>"
+            "<td>1</td>"
+            "<td>Scaffolding \uc124\uce58</td>"
+            "<td>150A</td><td>SS400</td><td>STD</td><td>150#</td><td>BW</td><td>MAIN</td><td>T-1</td>"
+            "<td>1</td><td>\uc2dd</td>"
+            "</tr>"
+            "</table>"
+        )
+
+        result = parse_html_bom_tables(html, local_keywords)
+        assert len(result.bom_sections) == 1
+
+        bom_sec = result.bom_sections[0]
+        assert len(bom_sec.headers) == 15
+        assert "DESCRIPTION_DESCRIPTION" not in bom_sec.headers
+        assert bom_sec.rows[0][1] == "Scaffolding \uc124\uce58"
+        assert bom_sec.rows[0][13] == "1"
+        assert bom_sec.rows[0][14] == "\uc2dd"

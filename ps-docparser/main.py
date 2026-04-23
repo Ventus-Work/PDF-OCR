@@ -133,6 +133,7 @@ def main():
     cache = _init_cache(args)
     inputs = _collect_inputs(args)
     is_batch = len(inputs) > 1
+    args._is_batch_mode = is_batch
 
     log_file = _project_root / "ps-docparser.log"
     succeeded: list[str] = []

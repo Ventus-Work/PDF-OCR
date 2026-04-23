@@ -3,6 +3,7 @@ parsers/section_splitter.py 단위 테스트 — Phase 10 Step 10-1
 목표 커버리지: 21.95% → 75%+
 """
 import json
+import re
 import pytest
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from parsers.section_splitter import (
     parse_page_markers,
     get_page_for_position,
     redistribute_text_to_sections,
+    split_sections_by_title_patterns,
     split_sections,
 )
 
@@ -312,3 +314,31 @@ class TestSplitSections:
         )
         sections = split_sections(text, "test.md", {}, {})
         assert len(sections) >= 1
+
+
+class TestSplitSectionsByTitlePatterns:
+    def test_splits_pumsem_like_titles_without_section_markers(self):
+        patterns = {
+            "chapter_title": re.compile(r"^(제\d+장\s+.+)$", re.MULTILINE),
+            "section_title": re.compile(r"^(\d+-\d+(?:-\d+)?)\s+(.+?)$", re.MULTILINE),
+        }
+        text = (
+            "제1장 적용기준\n"
+            "머리말입니다.\n"
+            "1-1 일반사항\n"
+            "일반사항 본문\n"
+            "1-2 단위표준\n"
+            "단위표준 본문\n"
+        )
+        sections = split_sections_by_title_patterns(text, "pumsem.md", patterns)
+        assert [section["section_id"] for section in sections] == ["intro", "1-1", "1-2"]
+        assert sections[1]["title"] == "일반사항"
+        assert sections[1]["chapter"] == "제1장 적용기준"
+        assert "1-1 일반사항" in sections[1]["raw_text"]
+
+    def test_returns_empty_when_no_section_title_pattern_matches(self):
+        patterns = {
+            "chapter_title": re.compile(r"^(제\d+장\s+.+)$", re.MULTILINE),
+            "section_title": re.compile(r"^(\d+-\d+(?:-\d+)?)\s+(.+?)$", re.MULTILINE),
+        }
+        assert split_sections_by_title_patterns("제1장 적용기준\n본문만", "pumsem.md", patterns) == []

@@ -29,6 +29,7 @@ from parsers.header_utils import (
     _is_header_like_row,
     detect_header_rows,
     build_composite_headers,
+    normalize_header_text,
     is_note_row,
     try_numeric,
 )
@@ -104,9 +105,24 @@ def parse_single_table(
 
     table_id = f"T-{section_id}-{table_idx:02d}"
 
+    def _make_unique_headers(header_values: list[str]) -> list[str]:
+        seen: dict[str, int] = {}
+        unique_headers: list[str] = []
+
+        for idx, header in enumerate(header_values):
+            base = normalize_header_text(header) if header else ""
+            if not base:
+                base = f"col_{idx}"
+
+            count = seen.get(base, 0) + 1
+            seen[base] = count
+            unique_headers.append(base if count == 1 else f"{base}_{count}")
+
+        return unique_headers
+
     # 헤더만 있고 데이터 없는 경우
     if len(grid) < 2:
-        headers = [h.strip() for h in grid[0]]
+        headers = _make_unique_headers(build_composite_headers(grid, 1))
         return {
             "table_id": table_id,
             "type": classify_table(headers, [], type_keywords),
@@ -118,7 +134,7 @@ def parse_single_table(
         }
 
     n_header_rows = detect_header_rows(grid)
-    headers = build_composite_headers(grid, n_header_rows)
+    headers = _make_unique_headers(build_composite_headers(grid, n_header_rows))
     n_cols = len(headers)
 
     data_rows, note_rows = [], []
@@ -135,8 +151,7 @@ def parse_single_table(
         row_dict = {}
         for j, header in enumerate(headers):
             val = row[j] if j < len(row) else ""
-            key = header if header else f"col_{j}"
-            row_dict[key] = try_numeric(val)  # [리뷰 반영 3] str 유지
+            row_dict[header] = try_numeric(val)  # [리뷰 반영 3] str 유지
         # 모든 값이 빈 행 제외
         if any(v for v in row_dict.values() if v != "" and v is not None):
             rows_as_dicts.append(row_dict)
@@ -180,6 +195,9 @@ def process_section_tables(
     for idx, table_info in enumerate(table_htmls, 1):
         result = parse_single_table(table_info["html"], section_id, idx, type_keywords)
         if result:
+            result["section_title"] = section.get("title", "")
+            result["chapter"] = section.get("chapter", "")
+            result["source_section_id"] = section_id
             parsed_tables.append(result)
 
     return {

@@ -49,6 +49,7 @@ __all__ = [
     "get_page_for_position",
     "redistribute_text_to_sections",
     # orchestration (this module)
+    "split_sections_by_title_patterns",
     "split_sections",
 ]
 
@@ -56,6 +57,102 @@ __all__ = [
 # ═══════════════════════════════════════════════════════
 # 오케스트레이터 (이 파일에 유지)
 # ═══════════════════════════════════════════════════════
+
+def _strip_parser_markers(text: str) -> str:
+    """페이지/컨텍스트 마커를 제거한 뒤 앞뒤 공백을 정리한다."""
+    text = _PAGE_MARKER.sub("", text)
+    text = _SECTION_MARKER.sub("", text)
+    text = _CONTEXT_MARKER.sub("", text)
+    text = _CONTEXT_SECTION_MARKER.sub("", text)
+    return text.strip()
+
+
+def _current_chapter_title(chapter_matches: list[re.Match], pos: int) -> str:
+    """현재 위치에 가장 가까운 직전 장 제목을 찾는다."""
+    current = ""
+    for match in chapter_matches:
+        if match.start() > pos:
+            break
+        current = match.group(0).strip()
+    return current
+
+
+def split_sections_by_title_patterns(
+    text: str,
+    source_file: str,
+    patterns: dict | None,
+) -> list[ParsedSection]:
+    """
+    SECTION 마커가 없는 품셈 문서를 제목 패턴으로 분리한다.
+
+    Why:
+        TOC/SECTION 마커가 없는 품셈 문서는 `1-2`, `1-2-1`류 제목만 남아 있는 경우가
+        많다. 이 fallback이 없으면 문서 전체가 `doc` 한 섹션으로 묶여 섹션별 표 맥락을
+        잃는다.
+    """
+    if not patterns:
+        return []
+
+    section_pattern = patterns.get("section_title")
+    if section_pattern is None:
+        return []
+
+    section_matches = list(section_pattern.finditer(text))
+    if not section_matches:
+        return []
+
+    chapter_pattern = patterns.get("chapter_title")
+    chapter_matches = list(chapter_pattern.finditer(text)) if chapter_pattern else []
+    page_markers = parse_page_markers(text)
+    file_start_page = page_markers[0]["page"] if page_markers else 0
+
+    sections: list[ParsedSection] = []
+    seen_ids: dict[str, int] = {}
+
+    def _append_section(
+        section_id: str,
+        title: str,
+        chapter: str,
+        start: int,
+        end: int,
+    ) -> None:
+        raw_text = _strip_parser_markers(text[start:end])
+        if len(raw_text) <= 10:
+            return
+
+        base_id = section_id or f"section_{len(sections) + 1}"
+        count = seen_ids.get(base_id, 0) + 1
+        seen_ids[base_id] = count
+        unique_id = base_id if count == 1 else f"{base_id}_{count}"
+
+        sections.append({
+            "section_id": unique_id,
+            "title": title.strip() or unique_id,
+            "department": "",
+            "chapter": chapter.strip(),
+            "page": get_page_for_position(page_markers, start, file_start_page),
+            "raw_text": raw_text,
+            "source_file": source_file,
+            "toc_title": "",
+            "toc_section": "",
+            "has_content": True,
+        })
+
+    first_start = section_matches[0].start()
+    intro_text = _strip_parser_markers(text[:first_start])
+    if len(intro_text) > 10:
+        intro_chapter = _current_chapter_title(chapter_matches, first_start)
+        _append_section("intro", intro_chapter or "서문", intro_chapter, 0, first_start)
+
+    for idx, match in enumerate(section_matches):
+        start = match.start()
+        end = section_matches[idx + 1].start() if idx + 1 < len(section_matches) else len(text)
+        section_id = match.group(1).strip() if match.lastindex and match.lastindex >= 1 else ""
+        title = match.group(2).strip() if match.lastindex and match.lastindex >= 2 else match.group(0).strip()
+        chapter = _current_chapter_title(chapter_matches, start)
+        _append_section(section_id, title, chapter, start, end)
+
+    return sections
 
 def split_sections(
     text: str,

@@ -113,3 +113,30 @@ class TestBomPipeline:
             assert "혼합 문서" in mock_logger.call_args[0][0]
         else:
             mock_logger.assert_not_called()
+
+    def test_material_quote_warning_when_bom_empty(self, tmp_path, mocker):
+        mock_engine = MagicMock()
+        mock_engine.supports_ocr = True
+        mocker.patch("pipelines.bom_pipeline.create_engine", return_value=mock_engine)
+        mocker.patch("presets.bom.get_bom_keywords", return_value={})
+        mocker.patch("presets.bom.get_image_settings", return_value={})
+
+        bom_result = MagicMock()
+        bom_result.raw_text = ("견적서 거래처 결정금액 품목 치수 수량 단가 단위 공급가액 메모 " * 30).strip()
+        bom_result.drawing_metadata = {"dwg_no": None}
+        bom_result.bom_sections = []
+        bom_result.line_list_sections = []
+
+        mocker.patch("extractors.bom_extractor.extract_bom_with_retry", return_value=bom_result)
+        mocker.patch("extractors.bom_extractor.to_sections", return_value=[])
+        mocker.patch("exporters.json_exporter.JsonExporter.export")
+        mocker.patch("utils.io._safe_write_text")
+        mocker.patch("pipelines.bom_pipeline.detect_material_quote", return_value=True)
+
+        mock_logger = mocker.patch("logging.Logger.warning")
+
+        ctx = _make_ctx(tmp_path, engine="zai")
+        BomPipeline(ctx).run()
+
+        assert mock_logger.called
+        assert any("비-BOM 자재 견적표" in call.args[0] for call in mock_logger.call_args_list)

@@ -35,7 +35,7 @@ def parse_html_bom_tables(
     4. expand_table() → 타이틀 행 스킵 → 실제 헤더/데이터 분리
     5. 행 필터링 (노이즈 제거)
     """
-    from parsers.table_parser import expand_table  # 기존 rowspan/colspan 처리 재사용
+    from parsers.table_parser import expand_table, build_composite_headers  # 기존 rowspan/colspan 처리 재사용
 
     header_a  = keywords.get("bom_header_a", [])
     header_b  = keywords.get("bom_header_b", [])
@@ -137,11 +137,11 @@ def parse_html_bom_tables(
         if len(effective_grid) < 2:
             continue
 
-        headers = effective_grid[0]
+        headers = [str(cell).strip() for cell in effective_grid[0]]
         rows = effective_grid[1:]
 
         # 다단 헤더(복합 헤더) 병합 (P2)
-        if rows:
+        if False and rows:
             sub_header_keywords = {"UNIT", "WEIGHT", "LOSS", "M2", "KG", "단위", "수량", "중량", "면적"}
             row0_upper = [str(c).upper().strip() for c in rows[0]]
             matched_count = sum(1 for c in row0_upper if any(kw in c for kw in sub_header_keywords))
@@ -173,6 +173,12 @@ def parse_html_bom_tables(
                 logger.info("2행 복합 헤더 병합 완료: %s", headers)
 
         # 노이즈 행 필터링
+        if rows and _looks_like_sub_header_row(rows[0]):
+            headers = build_composite_headers([headers, rows[0]], 2)
+            rows = rows[1:]
+            logger.info("2??蹂듯빀 ?ㅻ뜑 蹂묓빀 ?꾨즺: %s", headers)
+
+        rows = _normalize_html_bom_rows(rows, headers)
         filtered = filter_noise_rows(rows, noise_kw)
 
         # LINE LIST vs BOM 분류
@@ -205,6 +211,142 @@ def parse_html_bom_tables(
         bom_sections=bom_sections,
         line_list_sections=ll_sections,
     )
+
+
+def _looks_like_sub_header_row(row: list[str]) -> bool:
+    keywords = {
+        "UNIT",
+        "WEIGHT",
+        "LOSS",
+        "M2",
+        "KG",
+        "QTY",
+        "Q'TY",
+        "\ub2e8\uc704",
+        "\uc218\ub7c9",
+        "\uc911\ub7c9",
+        "\uba74\uc801",
+    }
+    row_upper = [str(cell).upper().strip() for cell in row]
+    non_empty = [cell for cell in row_upper if cell]
+    if len(non_empty) < 2:
+        return False
+
+    matched_count = sum(1 for cell in non_empty if any(keyword in cell for keyword in keywords))
+    number_count = sum(1 for cell in non_empty if re.match(r"^-?[\d,.]+$", cell))
+    return matched_count >= 2 and number_count <= max(1, len(non_empty) / 2)
+
+    sub_header_keywords = {
+        "UNIT",
+        "WEIGHT",
+        "LOSS",
+        "M2",
+        "KG",
+        "QTY",
+        "Q'TY",
+        "?⑥쐞",
+        "?섎웾",
+        "以묐웾",
+        "硫댁쟻",
+    }
+    row_upper = [str(cell).upper().strip() for cell in row]
+    non_empty = [cell for cell in row_upper if cell]
+    if len(non_empty) < 2:
+        return False
+
+    matched_count = sum(1 for cell in non_empty if any(keyword in cell for keyword in sub_header_keywords))
+    number_count = sum(1 for cell in non_empty if re.match(r"^-?[\d,.]+$", cell))
+    return matched_count >= 2 and number_count <= max(1, len(non_empty) / 2)
+
+
+def _realign_sparse_bom_row(row: list[str], headers: list[str]) -> list[str]:
+    target = len(headers)
+    padded = row[:target] + [""] * max(target - len(row), 0)
+    if len(row) <= 1:
+        return padded
+
+    composite_indexes = [idx for idx, header in enumerate(headers) if "_" in header]
+    if not composite_indexes:
+        return padded
+
+    group_start = composite_indexes[0]
+    group_end = composite_indexes[-1] + 1
+    tail_width = target - group_end
+    if group_start <= 0:
+        return padded
+
+    suffix_values = [cell for cell in padded[group_start:] if str(cell).strip()]
+    if (
+        len(row) >= target
+        and tail_width > 0
+        and not any(str(cell).strip() for cell in padded[group_end:])
+        and 0 < len(suffix_values) <= tail_width
+        and all(str(cell).strip() for cell in padded[:group_start])
+    ):
+        return padded[:group_start] + [""] * (target - group_start - len(suffix_values)) + suffix_values
+
+    if len(row) <= group_start:
+        return padded
+
+    prefix_len = 0
+    while prefix_len < min(len(row), group_start) and str(row[prefix_len]).strip():
+        prefix_len += 1
+    if prefix_len == 0:
+        return padded
+
+    suffix = list(row[prefix_len:])
+    group_width = target - group_start
+    if len(suffix) > group_width:
+        return padded
+
+    base = list(row[:prefix_len]) + [""] * (group_start - prefix_len)
+    group_values = [""] * (group_width - len(suffix)) + suffix
+    return base + group_values
+
+    target = len(headers)
+    group_start = next((idx for idx, header in enumerate(headers) if "_" in header), target)
+    padded = row + [""] * (target - len(row))
+
+    if group_start == target or len(row) >= target or len(row) <= 1:
+        return padded
+
+    prefix_len = 0
+    while prefix_len < len(row) and str(row[prefix_len]).strip():
+        prefix_len += 1
+
+    if prefix_len == 0 or prefix_len >= group_start:
+        return padded
+
+    suffix = list(row[prefix_len:])
+    remaining_base = group_start - prefix_len
+    overflow = len(suffix) - remaining_base
+    if overflow > 0:
+        if any(str(cell).strip() for cell in suffix[:overflow]):
+            return padded
+        suffix = suffix[overflow:]
+
+    base_row = list(row[:prefix_len]) + [""] * (remaining_base - len(suffix)) + suffix
+    return base_row + [""] * (target - len(base_row))
+
+
+def _normalize_html_bom_rows(rows: list[list[str]], headers: list[str]) -> list[list[str]]:
+    target = len(headers)
+    result = []
+    for row in rows:
+        if len(row) > target:
+            result.extend(normalize_columns([row], reference_col_count=target))
+            continue
+        result.append(_realign_sparse_bom_row(row, headers))
+    return result
+
+    target = len(headers)
+    result = []
+    for row in rows:
+        if len(row) > target:
+            result.extend(normalize_columns([row], reference_col_count=target))
+            continue
+        result.append(_realign_sparse_bom_row(row, headers))
+    return result
 
 
 def parse_markdown_pipe_table(text: str) -> list[list[str]]:

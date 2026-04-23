@@ -9,6 +9,93 @@ Why: table_parser.py 분해(Phase 12 Step 12-1) 결과물.
 """
 
 import re
+import unicodedata
+
+
+_RE_ASCII_ALNUM = re.compile(r"[A-Za-z0-9]")
+_RE_CJK_OR_HANGUL = re.compile(
+    r"[\u1100-\u11ff\u3130-\u318f\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7a3]"
+)
+
+
+def normalize_header_text(value: str) -> str:
+    """
+    헤더 문자열을 비교/조합하기 쉬운 canonical 형태로 정규화한다.
+
+    Why:
+        OCR/로컬 추출 결과에는 "단 가", "금 액", "單 價"처럼 글자 사이가
+        떨어진 헤더가 자주 섞여 들어온다. 이 상태로는 다단 헤더 조합과
+        이후 Excel 분류에서 동일 열로 인식되지 않으므로, 헤더 전용 정규화가 필요하다.
+    """
+    if value is None:
+        return ""
+
+    text = unicodedata.normalize("NFKC", str(value)).replace("\n", " ").strip()
+    if not text:
+        return ""
+
+    if "_" in text:
+        parts = [normalize_header_text(part) for part in text.split("_")]
+        return "_".join(part for part in parts if part)
+
+    text = re.sub(r"\s+", " ", text).strip()
+    if (
+        " " in text
+        and _RE_CJK_OR_HANGUL.search(text)
+        and not _RE_ASCII_ALNUM.search(text)
+    ):
+        text = text.replace(" ", "")
+
+    return text
+
+
+def _normalize_header_rows(grid: list[list[str]], n_header_rows: int) -> list[list[str]]:
+    """헤더 행을 정규화하고 같은 길이로 패딩한다."""
+    n_cols = max((len(row) for row in grid[:n_header_rows]), default=0)
+    normalized_rows: list[list[str]] = []
+
+    for row in grid[:n_header_rows]:
+        normalized = [normalize_header_text(cell) for cell in row[:n_cols]]
+        if len(normalized) < n_cols:
+            normalized.extend([""] * (n_cols - len(normalized)))
+        normalized_rows.append(normalized)
+
+    return normalized_rows
+
+
+def _forward_fill_parent_headers(header_rows: list[list[str]]) -> list[list[str]]:
+    """
+    다단 헤더의 상위 빈 칸을 좌측 부모 헤더로 보완한다.
+
+    Why:
+        colspan 이 확장된 결과 `["재료비", "", "노무비", ""]` 형태가 생기면,
+        같은 열의 하위 헤더("금액" 등)와 단순 세로 결합 시 bare key 만 남는다.
+        하위 헤더가 존재하는 경우에만 부모를 우측 전개해 `재료비_금액` 같은
+        완전한 composite key 를 만든다.
+    """
+    if len(header_rows) < 2:
+        return header_rows
+
+    filled_rows = [row[:] for row in header_rows]
+    n_rows = len(filled_rows)
+    n_cols = len(filled_rows[0]) if filled_rows else 0
+
+    for row_idx in range(n_rows - 1):
+        last_parent = ""
+        for col_idx in range(n_cols):
+            current = filled_rows[row_idx][col_idx]
+            if current:
+                last_parent = current
+                continue
+
+            has_child = any(
+                filled_rows[child_row][col_idx]
+                for child_row in range(row_idx + 1, n_rows)
+            )
+            if last_parent and has_child:
+                filled_rows[row_idx][col_idx] = last_parent
+
+    return filled_rows
 
 
 def classify_table(
@@ -154,15 +241,21 @@ def build_composite_headers(grid: list[list[str]], n_header_rows: int) -> list[s
 
     원본: table_parser.py L370~399
     """
-    if n_header_rows == 1:
-        return [h.strip() for h in grid[0]]
+    if not grid:
+        return []
+
+    normalized_rows = _normalize_header_rows(grid, n_header_rows)
+    if n_header_rows <= 1:
+        return normalized_rows[0] if normalized_rows else []
+
+    normalized_rows = _forward_fill_parent_headers(normalized_rows)
 
     headers = []
-    n_cols = len(grid[0])
+    n_cols = len(normalized_rows[0]) if normalized_rows else 0
     for c in range(n_cols):
         parts = []
         for r in range(n_header_rows):
-            val = grid[r][c].strip() if r < len(grid) and c < len(grid[r]) else ""
+            val = normalized_rows[r][c]
             if val and val not in parts:
                 parts.append(val)
         headers.append("_".join(parts) if len(parts) > 1 else (parts[0] if parts else ""))

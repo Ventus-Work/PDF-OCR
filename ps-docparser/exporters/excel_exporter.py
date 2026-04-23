@@ -18,6 +18,7 @@ Why: Phase 12 Step 12-2 분해 결과물.
 from __future__ import annotations
 
 from pathlib import Path
+import re
 from typing import Any
 
 from openpyxl import Workbook
@@ -78,6 +79,55 @@ __all__ = [
     # orchestration (this module)
     "_export_impl", "export", "ExcelExporter",
 ]
+
+
+_INVALID_SHEET_CHARS = re.compile(r"[\[\]:*?/\\]")
+_PLACEHOLDER_TITLES = {"", "doc", "inline_text"}
+_GENERIC_TYPE_LABELS = {
+    "A_품셈": "품셈",
+    "B_규모기준": "규모기준",
+    "C_구분설명": "설명",
+    "D_기타": "설명",
+}
+
+
+def _normalize_sheet_token(value: Any) -> str:
+    token = str(value or "").replace("\n", " ").strip()
+    token = re.sub(r"\s+", " ", token)
+    token = _INVALID_SHEET_CHARS.sub("_", token)
+    return token.strip(" .'")
+
+
+def _generic_sheet_base_name(table: dict, default_prefix: str) -> str:
+    section_title = _normalize_sheet_token(table.get("section_title", ""))
+    explicit_title = _normalize_sheet_token(table.get("title", ""))
+    table_type = str(table.get("type", ""))
+    type_label = _GENERIC_TYPE_LABELS.get(table_type, default_prefix)
+
+    if section_title and section_title.lower() not in _PLACEHOLDER_TITLES:
+        if type_label and type_label not in section_title:
+            return f"{section_title}_{type_label}"
+        return section_title
+
+    if explicit_title and explicit_title.lower() not in _PLACEHOLDER_TITLES:
+        return explicit_title
+
+    return type_label or default_prefix
+
+
+def _make_unique_sheet_name(base: str, used_names: set[str]) -> str:
+    base = _normalize_sheet_token(base) or "Table"
+    name = base[:31]
+    suffix = 2
+
+    while not name or name in used_names:
+        suffix_text = f"_{suffix}"
+        room = max(1, 31 - len(suffix_text))
+        name = f"{base[:room]}{suffix_text}"
+        suffix += 1
+
+    used_names.add(name)
+    return name
 
 
 # ═══════════════════════════════════════════════════════
@@ -200,39 +250,23 @@ def _export_impl(
         ws_dwg_meta.sheet_view.showGridLines = False
         _build_drawing_meta_sheet(ws_dwg_meta, drawing_meta_sections[0].get("drawing_metadata", {}))
 
+    used_sheet_names = set(wb.sheetnames)
+
     # ── 범용 시트 (분류 불가 테이블) [수정 B] ──
     if generic_tables:
-        for i, tbl in enumerate(generic_tables, start=1):
-            tbl_title = tbl.get("title", "")
-            if tbl_title:
-                sheet_name = (
-                    f"{tbl_title}_{i}"
-                    if len(generic_tables) > 1
-                    and sum(1 for t in generic_tables if t.get("title") == tbl_title) > 1
-                    else tbl_title
-                )
-            else:
-                sheet_name = f"Table_{i}" if len(generic_tables) > 1 else "Table"
-
-            ws_gen = wb.create_sheet(sheet_name[:31])  # Excel 시트명 31자 제한
+        for tbl in generic_tables:
+            base_name = _generic_sheet_base_name(tbl, "Table")
+            sheet_name = _make_unique_sheet_name(base_name, used_sheet_names)
+            ws_gen = wb.create_sheet(sheet_name)
             ws_gen.sheet_view.showGridLines = False
             _build_generic_sheet(ws_gen, tbl)
 
     # ── BOM 범용 시트 (P3) ──
     if bom_generic_tables:
-        for i, tbl in enumerate(bom_generic_tables, start=1):
-            tbl_title = tbl.get("title", "")
-            if tbl_title:
-                sheet_name = (
-                    f"{tbl_title}_{i}"
-                    if len(bom_generic_tables) > 1
-                    and sum(1 for t in bom_generic_tables if t.get("title") == tbl_title) > 1
-                    else tbl_title
-                )
-            else:
-                sheet_name = f"BOM_자재표_{i}" if len(bom_generic_tables) > 1 else "BOM_자재표"
-
-            ws_gen = wb.create_sheet(sheet_name[:31])
+        for tbl in bom_generic_tables:
+            base_name = _generic_sheet_base_name(tbl, "BOM_자재표")
+            sheet_name = _make_unique_sheet_name(base_name, used_sheet_names)
+            ws_gen = wb.create_sheet(sheet_name)
             ws_gen.sheet_view.showGridLines = False
             _build_generic_sheet(ws_gen, tbl)
 
