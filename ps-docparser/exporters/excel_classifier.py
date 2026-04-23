@@ -50,6 +50,13 @@ def _classify_table(table: dict) -> str:
     if t == "D_기타":
         return "condition"
 
+    # [P3] BOM-specific generic 판별 강화 (최소 2개 이상 키워드 일치 또는 명시적 타입)
+    bom_kws = ["dwgno", "size", "mat'l", "q'ty", "description", "mark", "weight"]
+    matched_kws = sum(1 for kw in bom_kws if kw in header_str)
+    
+    if t in ("BOM_자재", "BOM_LINE_LIST") or matched_kws >= 2:
+        return "bom_generic"
+
     # [수정 A] "unknown" → "generic": 스킵 대신 범용 처리 경로로 전환
     return "generic"
 

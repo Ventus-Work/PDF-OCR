@@ -292,3 +292,26 @@ class TestParseHtmlBomTables:
         html = "<table><tr><td>A</td></tr></table>"
         result = parse_html_bom_tables(html, {})
         assert result.bom_sections == []
+
+    def test_two_row_header_is_merged_and_second_header_row_not_emitted_as_data(self, bom_keywords):
+        html = (
+            "<table>"
+            "<tr><th>자재명</th><th>규격</th><th>자재중량 [Kg]</th><th>수량</th><th>단위</th></tr>"
+            "<tr><th>ITEM</th><th>SIZE</th><th>WEIGHT</th><th>QTY</th><th>UNIT</th></tr>"
+            "<tr><td>PIPE</td><td>100A</td><td>10.5</td><td>5</td><td>EA</td></tr>"
+            "</table>"
+        )
+        result = parse_html_bom_tables(html, bom_keywords)
+        assert len(result.bom_sections) == 1
+        
+        bom_sec = result.bom_sections[0]
+        # 헤더가 상위 | 하위 로 병합되었는지 확인
+        assert "자재명 | ITEM" in bom_sec.headers
+        assert "규격 | SIZE" in bom_sec.headers
+        assert "자재중량 [Kg] | WEIGHT" in bom_sec.headers
+        assert "수량 | QTY" in bom_sec.headers
+        assert "단위 | UNIT" in bom_sec.headers
+        
+        # 데이터 행에 두 번째 헤더인 ITEM / SIZE / WEIGHT 가 남아있으면 안 됨
+        assert len(bom_sec.rows) == 1
+        assert bom_sec.rows[0] == ["PIPE", "100A", "10.5", "5", "EA"]

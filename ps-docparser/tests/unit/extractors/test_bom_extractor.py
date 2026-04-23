@@ -620,3 +620,21 @@ class TestToSections:
         sections = to_sections(res)
         assert len(sections) == 1
         assert sections[0]["section_id"] == "BOM-1"
+
+    def test_duplicate_headers_are_suffixed_in_to_sections(self):
+        bom = BomSection(
+            "bom",
+            headers=["WEIGHT", "WEIGHT", "WEIGHT"],
+            rows=[["10", "20", "30"]],
+            raw_row_count=1,
+        )
+        res = BomExtractionResult(bom_sections=[bom])
+        sections = to_sections(res)
+        
+        headers = sections[0]["tables"][0]["headers"]
+        assert headers == ["WEIGHT", "WEIGHT_2", "WEIGHT_3"]
+        
+        row_dict = sections[0]["tables"][0]["rows"][0]
+        assert row_dict["WEIGHT"] == "10"
+        assert row_dict["WEIGHT_2"] == "20"
+        assert row_dict["WEIGHT_3"] == "30"

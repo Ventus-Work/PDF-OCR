@@ -53,11 +53,22 @@ def to_sections(result: BomExtractionResult) -> list[dict]:
     for i, bom in enumerate(result.bom_sections, 1):
         if not bom.rows:
             continue
+            
+        deduped_headers = []
+        seen = {}
+        for h in bom.headers:
+            if h in seen:
+                seen[h] += 1
+                deduped_headers.append(f"{h}_{seen[h]}")
+            else:
+                seen[h] = 1
+                deduped_headers.append(h)
+
         rows_as_dicts = []
         for row in bom.rows:
             row_dict = {}
             for j, cell in enumerate(row):
-                key = bom.headers[j] if j < len(bom.headers) else f"열{j+1}"
+                key = deduped_headers[j] if j < len(deduped_headers) else f"열{j+1}"
                 row_dict[key] = cell
             rows_as_dicts.append(row_dict)
 
@@ -71,7 +82,7 @@ def to_sections(result: BomExtractionResult) -> list[dict]:
             "tables": [{
                 "table_id": f"T-BOM-{i}-01",
                 "type": "BOM_자재",
-                "headers": bom.headers,
+                "headers": deduped_headers,
                 "rows": rows_as_dicts,
                 "notes_in_table": [],
                 "raw_row_count": bom.raw_row_count,
@@ -87,11 +98,22 @@ def to_sections(result: BomExtractionResult) -> list[dict]:
     for i, ll in enumerate(result.line_list_sections, 1):
         if not ll.rows:
             continue
+            
+        deduped_headers = []
+        seen = {}
+        for h in ll.headers:
+            if h in seen:
+                seen[h] += 1
+                deduped_headers.append(f"{h}_{seen[h]}")
+            else:
+                seen[h] = 1
+                deduped_headers.append(h)
+
         rows_as_dicts = []
         for row in ll.rows:
             row_dict = {}
             for j, cell in enumerate(row):
-                key = ll.headers[j] if j < len(ll.headers) else f"열{j+1}"
+                key = deduped_headers[j] if j < len(deduped_headers) else f"열{j+1}"
                 row_dict[key] = cell
             rows_as_dicts.append(row_dict)
 
@@ -106,7 +128,7 @@ def to_sections(result: BomExtractionResult) -> list[dict]:
             "tables": [{
                 "table_id": f"T-LL-{i}-01",
                 "type": "BOM_LINE_LIST",
-                "headers": ll.headers,
+                "headers": deduped_headers,
                 "rows": rows_as_dicts,
                 "notes_in_table": [],
                 "raw_row_count": ll.raw_row_count,

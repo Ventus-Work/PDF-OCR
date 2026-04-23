@@ -114,6 +114,7 @@ def _export_impl(
     detail_tables:    list[dict] = []
     condition_tables: list[dict] = []
     generic_tables:   list[dict] = []  # [수정 B] generic 대기열 추가
+    bom_generic_tables: list[dict] = []  # [P3] bom_generic 대기열 추가
 
     for section in sections:
         # 문서 제목 우선순위: 인수 > section.title > clean_text 첫 줄
@@ -131,6 +132,8 @@ def _export_impl(
                 detail_tables.append(tbl)
             elif kind == "condition":
                 condition_tables.append(tbl)
+            elif kind == "bom_generic":      # [P3]
+                bom_generic_tables.append(tbl)
             elif kind == "generic":          # [수정 B]
                 generic_tables.append(tbl)
 
@@ -215,8 +218,26 @@ def _export_impl(
             ws_gen.sheet_view.showGridLines = False
             _build_generic_sheet(ws_gen, tbl)
 
+    # ── BOM 범용 시트 (P3) ──
+    if bom_generic_tables:
+        for i, tbl in enumerate(bom_generic_tables, start=1):
+            tbl_title = tbl.get("title", "")
+            if tbl_title:
+                sheet_name = (
+                    f"{tbl_title}_{i}"
+                    if len(bom_generic_tables) > 1
+                    and sum(1 for t in bom_generic_tables if t.get("title") == tbl_title) > 1
+                    else tbl_title
+                )
+            else:
+                sheet_name = f"BOM_자재표_{i}" if len(bom_generic_tables) > 1 else "BOM_자재표"
+
+            ws_gen = wb.create_sheet(sheet_name[:31])
+            ws_gen.sheet_view.showGridLines = False
+            _build_generic_sheet(ws_gen, tbl)
+
     # ── 분류된 테이블/필드가 하나도 없을 때 ── 원시 덤프
-    has_any_legacy = estimate_tables or detail_tables or condition_tables or generic_tables
+    has_any_legacy = estimate_tables or detail_tables or condition_tables or generic_tables or bom_generic_tables
     has_any_new = (
         any(s.get("clean_text", "").strip() for s in sections)
         or any(s.get("notes") for s in sections)

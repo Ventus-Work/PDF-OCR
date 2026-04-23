@@ -62,6 +62,24 @@ class BomPipeline(BasePipeline):
         print(f"     BOM {len(bom_result.bom_sections)}개 / "
               f"LINE LIST {len(bom_result.line_list_sections)}개")
 
+        # [P4] 혼합 문서 경고 로그 추가
+        raw_text_len = len(bom_result.raw_text.strip()) if bom_result.raw_text else 0
+        has_meta = any(v is not None for v in bom_result.drawing_metadata.values())
+        total_tables = len(bom_result.bom_sections) + len(bom_result.line_list_sections)
+        
+        looks_like_mixed_doc = (
+            0 < total_tables <= 2
+            and not has_meta
+            and raw_text_len >= 1000
+        )
+        
+        if looks_like_mixed_doc:
+            import logging
+            logger = logging.getLogger(__name__)
+            warning_msg = "⚠ 혼합 문서(견적/내역서+BOM 표 1~2개)로 추정됩니다. 도면 메타데이터가 없고 텍스트가 많아 일부 테이블만 추출되었을 수 있습니다."
+            print(f"     {warning_msg}")
+            logger.warning(warning_msg)
+
         from exporters.json_exporter import JsonExporter
         json_path = Path(str(output_base) + ".json")
         JsonExporter().export(sections, json_path)

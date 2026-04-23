@@ -140,6 +140,38 @@ def parse_html_bom_tables(
         headers = effective_grid[0]
         rows = effective_grid[1:]
 
+        # 다단 헤더(복합 헤더) 병합 (P2)
+        if rows:
+            sub_header_keywords = {"UNIT", "WEIGHT", "LOSS", "M2", "KG", "단위", "수량", "중량", "면적"}
+            row0_upper = [str(c).upper().strip() for c in rows[0]]
+            matched_count = sum(1 for c in row0_upper if any(kw in c for kw in sub_header_keywords))
+            number_count = sum(1 for c in row0_upper if re.match(r"^-?[\d,.]+$", c))
+            
+            if matched_count >= 2 and number_count <= max(1, len(row0_upper) / 2):
+                sub_headers = rows[0]
+                rows = rows[1:]
+                merged_headers = []
+                last_valid_h1 = ""
+                
+                max_len = max(len(headers), len(sub_headers))
+                for j in range(max_len):
+                    h1_str = str(headers[j]).strip() if j < len(headers) else ""
+                    h2_str = str(sub_headers[j]).strip() if j < len(sub_headers) else ""
+                    
+                    if h1_str:
+                        last_valid_h1 = h1_str
+                    else:
+                        h1_str = last_valid_h1
+                        
+                    if h1_str and h2_str:
+                        merged_headers.append(f"{h1_str} | {h2_str}")
+                    elif h2_str:
+                        merged_headers.append(h2_str)
+                    else:
+                        merged_headers.append(h1_str)
+                headers = merged_headers
+                logger.info("2행 복합 헤더 병합 완료: %s", headers)
+
         # 노이즈 행 필터링
         filtered = filter_noise_rows(rows, noise_kw)
 
