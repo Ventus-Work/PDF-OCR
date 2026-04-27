@@ -59,6 +59,7 @@ class TestValidateConfig:
     def test_missing_gemini_key_errors(self, monkeypatch):
         import config
         monkeypatch.setattr(config, "GEMINI_API_KEY", None)
+        monkeypatch.setattr(config, "GEMINI_API_KEYS", ())
         monkeypatch.setattr(config, "DEFAULT_ENGINE", "gemini")
         result = config.validate_config(verbose=False)
         assert any("GEMINI_API_KEY" in e for e in result["errors"])
@@ -66,6 +67,7 @@ class TestValidateConfig:
     def test_valid_gemini_setup(self, monkeypatch):
         import config
         monkeypatch.setattr(config, "GEMINI_API_KEY", "fake_key_123")
+        monkeypatch.setattr(config, "GEMINI_API_KEYS", ("fake_key_123", "fake_key_456"))
         monkeypatch.setattr(config, "DEFAULT_ENGINE", "gemini")
         monkeypatch.setattr(config, "POPPLER_PATH", "/fake/poppler")
         result = config.validate_config(verbose=False)

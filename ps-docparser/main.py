@@ -71,7 +71,7 @@ def _init_cache(args):
     return None
 
 
-def _process_single(args, input_path: Path, out_dir: Path, cache, tracker) -> None:
+def _process_single(args, input_path: Path, out_dir: Path, cache, tracker):
     """단일 파일 파이프라인 실행 — pipelines/ 패키지에 위임한다."""
     ctx = PipelineContext(
         input_path=Path(input_path),
@@ -80,7 +80,7 @@ def _process_single(args, input_path: Path, out_dir: Path, cache, tracker) -> No
         cache=cache,
         tracker=tracker,
     )
-    create_pipeline(ctx).run()
+    return create_pipeline(ctx).run()
 
 
 def _run_bom_aggregation(args, out_dir: Path, succeeded: list[str]) -> None:
@@ -88,13 +88,15 @@ def _run_bom_aggregation(args, out_dir: Path, succeeded: list[str]) -> None:
     print("\n-- BOM 배치 집계 --")
     try:
         from exporters.bom_aggregator import export_aggregated_excel
+        from utils.run_manifest import representative_bom_jsons_from_manifest
         date_str = datetime.now().strftime("%Y%m%d")
-        json_files: list[Path] = []
-        for pdf_name in succeeded:
-            stem = Path(pdf_name).stem
-            candidates = list(out_dir.glob(f"*_{stem}_bom.json"))
-            if candidates:
-                json_files.append(sorted(candidates)[-1])
+        json_files: list[Path] = representative_bom_jsons_from_manifest(out_dir)
+        if not json_files:
+            for pdf_name in succeeded:
+                stem = Path(pdf_name).stem
+                candidates = list(out_dir.glob(f"*_{stem}_bom.json"))
+                if candidates:
+                    json_files.append(sorted(candidates)[-1])
 
         if json_files:
             agg_path = out_dir / f"{date_str}_BOM집계.xlsx"

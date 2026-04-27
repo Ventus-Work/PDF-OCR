@@ -77,6 +77,8 @@ class MistralEngine(BaseEngine):
                 model=self._model,
                 document={"type": "document_url", "document_url": data_uri},
             )
+            if self._tracker:
+                self._tracker.add(0, 0)
         except Exception as e:
             logger.error("Mistral OCR API 호출 실패: %s", e)
             raise
@@ -111,6 +113,8 @@ class MistralEngine(BaseEngine):
                 model=self._model,
                 document={"type": "document_url", "document_url": data_uri},
             )
+            if self._tracker:
+                self._tracker.add(0, 0)
         except Exception as e:
             logger.error("Mistral OCR 이미지 처리 실패: %s", e)
             raise

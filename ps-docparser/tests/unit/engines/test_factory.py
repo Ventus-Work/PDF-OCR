@@ -29,6 +29,14 @@ class TestCreateEngine:
         mock_cls = MagicMock()
         mocker.patch("engines.gemini_engine.GeminiEngine", mock_cls)
         mocker.patch.object(__import__("config"), "GEMINI_API_KEY", "fake-key")
+        mocker.patch.object(__import__("config"), "GEMINI_API_KEYS", ("fake-key", "fake-key-2"))
+        mocker.patch.object(__import__("config"), "GEMINI_KEY_MAX_CALLS", 20)
         mocker.patch.object(__import__("config"), "GEMINI_MODEL", "gemini-pro")
+        mocker.patch("engines.factory._get_gemini_key_rotator", return_value="rotator")
         create_engine("gemini")
-        mock_cls.assert_called_once()
+        mock_cls.assert_called_once_with(
+            api_key="fake-key",
+            model="gemini-pro",
+            tracker=None,
+            key_rotator="rotator",
+        )

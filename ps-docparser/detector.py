@@ -1,118 +1,284 @@
-"""
-detector.py — 문서 유형 자동 감지기 (텍스트 기반)
+"""Keyword-based document detection for generic and specialized routing."""
 
-Why: Phase 1 추출 완료 후의 MD 텍스트를 입력으로 받아
-     키워드 매칭으로 문서 유형을 판별한다.
-     --preset 미지정 시에만 동작하며, 확신도 낮으면 None 반환.
+from __future__ import annotations
 
-Dependencies: 없음 (순수 문자열 처리)
-"""
+from dataclasses import dataclass
 
-
-# ── 키워드 정의 ──
 
 ESTIMATE_KEYWORDS = [
-    "見積", "견적", "견적금액", "내역서", "납품기일",
-    "결제조건", "견적유효기간", "직접비", "간접비",
+    "견적",
+    "견적서",
+    "견적금액",
+    "내역서",
+    "납품기일",
+    "결제조건",
+    "견적유효기간",
+    "직접비",
+    "간접비",
+    "품목",
+    "수량",
+    "단가",
+    "공급가액",
 ]
 
 PUMSEM_KEYWORDS = [
-    "품셈", "수량산출", "부문", "제6장", "단위당",
-    "적용기준", "노무비", "참조", "보완",
+    "품셈",
+    "수량산출",
+    "부문",
+    "공종",
+    "단위",
+    "적용기준",
+    "노무비",
+    "참조",
+    "보완",
 ]
 
-# BOM 직접 감지 키워드 (영문 대우자 매칭, text_upper 사용)
-# Why: BOM 도면은 영문이 대부분이므로 .upper()로 통일 및 estimate/pumsem 키워드와 충돌 없음
 BOM_KEYWORDS = [
-    "BILL OF MATERIALS", "BILL OF MATERIAL",
-    "S/N", "MARK", "WT(KG)", "Q'TY", "MAT'L",
-    "LINE LIST", "LINE NO",
+    "BILL OF MATERIALS",
+    "BILL OF MATERIAL",
+    "S/N",
+    "MARK",
+    "WT(KG)",
+    "Q'TY",
+    "MAT'L",
+    "LINE LIST",
+    "LINE NO",
+    "DESCRIPTION",
+    "DWG NO",
+    "UNIT",
+    "WEIGHT",
+    "LOSS",
+]
+
+BOM_STRUCTURE_KEYWORDS = [
+    "S/N",
+    "MARK",
+    "WT(KG)",
+    "Q'TY",
+    "MAT'L",
+    "DESCRIPTION",
+    "DWG NO",
+    "UNIT",
+    "WEIGHT",
 ]
 
 MATERIAL_QUOTE_KEYWORDS = [
-    "견적서", "건 적 서", "결정금액", "거래처", "공급가액",
-    "품목", "재질", "치수", "중량", "메모",
+    "견적서",
+    "건명",
+    "결정금액",
+    "거래처",
+    "공급가액",
+    "항목",
+    "품목",
+    "사양",
+    "치수",
+    "수량",
+    "단가",
+    "중량",
+    "메모",
 ]
 
-# Why: 3→4 상향 — "견적", "노무비" 같은 단어가 아무 문서 도입부에도
-#      등장할 수 있어 오탐 방지를 위해 임계값을 높임.
 THRESHOLD = 4
-THRESHOLD_BOM = 3  # BOM 키워드 매칭 임계값
+THRESHOLD_BOM = 3
 THRESHOLD_MATERIAL_QUOTE = 5
 
 
-def detect_material_quote(text: str) -> bool:
-    """
-    자재 견적표 성격의 문서를 판별한다.
+@dataclass(frozen=True)
+class DetectionResult:
+    """Structured detector output used by auto-routing."""
 
-    Why:
-        "아연도금강판 견적서"처럼 표 구조는 깔끔하지만 BOM/LINE LIST가 아닌
-        자재 견적표가 있다. 이런 문서를 BOM으로 오해해 빈 결과만 내지 않도록
-        문맥과 헤더 조합을 따로 감지한다.
-    """
+    label: str | None
+    confidence: str
+    scores: dict[str, int]
+    reason_hits: list[str]
+    material_quote: bool
+    suggestion: str
+
+
+def _count_hits(text: str, keywords: list[str]) -> tuple[int, list[str]]:
+    hits = [keyword for keyword in keywords if keyword in text]
+    return len(hits), hits
+
+
+def _material_quote_features(text: str) -> tuple[int, bool]:
     if not text or not text.strip():
-        return False
+        return 0, False
 
     compact = text.replace(" ", "").replace("\n", "")
-    hits = sum(
-        1
+    hits = [
+        keyword
         for keyword in MATERIAL_QUOTE_KEYWORDS
         if keyword.replace(" ", "") in compact
-    )
+    ]
     has_material_header = all(
+        keyword in compact for keyword in ("항목", "치수", "수량", "단가", "공급가액")
+    ) or all(
         keyword in compact for keyword in ("품목", "치수", "수량", "단가", "공급가액")
     )
+    return len(hits), has_material_header
+
+
+def _top_score(scores: dict[str, int], label: str) -> tuple[int, int]:
+    selected = scores[label]
+    others = [value for key, value in scores.items() if key != label]
+    runner_up = max(others) if others else 0
+    return selected, runner_up
+
+
+def _resolve_confidence(
+    *,
+    label: str,
+    scores: dict[str, int],
+    bom_structure_hits: int,
+) -> str:
+    score, runner_up = _top_score(scores, label)
+
+    if label in {"estimate", "pumsem"}:
+        if score >= 6 and (score - runner_up) >= 2:
+            return "high"
+        if score >= 4 and (score - runner_up) >= 2:
+            return "medium"
+        return "low"
+
+    if label == "bom":
+        if score >= 5 and bom_structure_hits >= 2 and (score - runner_up) >= 2:
+            return "high"
+        if score >= THRESHOLD_BOM and score >= runner_up:
+            return "medium"
+        return "low"
+
+    return "low"
+
+
+def _build_suggestion(result: DetectionResult) -> str:
+    if result.material_quote:
+        return (
+            "이 문서는 자재 견적서로 보입니다. --preset estimate 를 지정하면 견적서 경로로 처리합니다."
+        )
+    if result.label == "estimate":
+        if result.confidence == "high":
+            return (
+                "이 문서는 estimate 성격이 강합니다. "
+                "--preset estimate 를 지정하면 정식 견적서 경로로 처리합니다."
+            )
+        return "이 문서는 estimate 후보입니다. 필요하면 --preset estimate 를 시도해보세요."
+    if result.label == "pumsem":
+        if result.confidence == "high":
+            return (
+                "이 문서는 pumsem 성격이 강합니다. "
+                "--preset pumsem 을 지정하면 품셈 경로로 처리합니다."
+            )
+        return "이 문서는 pumsem 후보입니다. 필요하면 --preset pumsem 을 시도해보세요."
+    if result.label == "bom":
+        if result.confidence == "high":
+            return (
+                "이 문서는 BOM 성격이 강합니다. "
+                "--preset bom --engine zai 를 지정하면 BOM 전용 경로로 처리합니다."
+            )
+        return "이 문서는 BOM 후보입니다. 필요하면 --preset bom 을 시도해보세요."
+    return ""
+
+
+def detect_material_quote(text: str) -> bool:
+    """Return True when the text looks like a material quotation document."""
+
+    hits, has_material_header = _material_quote_features(text)
     return hits >= THRESHOLD_MATERIAL_QUOTE or has_material_header
 
 
-def detect_document_type(text: str) -> str | None:
-    """
-    추출된 텍스트를 분석하여 문서 유형을 추정한다.
+def analyze_document_type(text: str) -> DetectionResult:
+    """Analyze document text and return a structured routing hint."""
 
-    Args:
-        text: Phase 1 추출 결과 (MD 문자열)
-
-    Returns:
-        "estimate" | "pumsem" | "bom" | None (판별 불가 → 범용)
-    """
+    empty_result = DetectionResult(
+        label=None,
+        confidence="low",
+        scores={"estimate": 0, "pumsem": 0, "bom": 0},
+        reason_hits=[],
+        material_quote=False,
+        suggestion="",
+    )
     if not text or not text.strip():
-        return None
+        return empty_result
 
-    # 한염 키워드: 원문 사용
-    estimate_score = sum(1 for kw in ESTIMATE_KEYWORDS if kw in text)
-    pumsem_score = sum(1 for kw in PUMSEM_KEYWORDS if kw in text)
+    estimate_score, estimate_hits = _count_hits(text, ESTIMATE_KEYWORDS)
+    pumsem_score, pumsem_hits = _count_hits(text, PUMSEM_KEYWORDS)
 
-    if estimate_score >= THRESHOLD and estimate_score > pumsem_score:
-        return "estimate"
-    elif pumsem_score >= THRESHOLD and pumsem_score > estimate_score:
-        return "pumsem"
-
-    if detect_material_quote(text):
-        return None
-
-    # BOM 키워드: 영문 대우자 통일어 매칭
     text_upper = text.upper()
-    bom_score = sum(1 for kw in BOM_KEYWORDS if kw in text_upper)
-    if bom_score >= THRESHOLD_BOM:
-        return "bom"
+    bom_score, bom_hits = _count_hits(text_upper, BOM_KEYWORDS)
+    bom_structure_score, bom_structure_hits = _count_hits(text_upper, BOM_STRUCTURE_KEYWORDS)
 
-    return None
+    material_quote = detect_material_quote(text)
+    scores = {
+        "estimate": estimate_score,
+        "pumsem": pumsem_score,
+        "bom": bom_score,
+    }
+    if material_quote:
+        scores["estimate"] = max(scores["estimate"], 6)
+    reason_hits = (
+        [f"estimate:{keyword}" for keyword in estimate_hits]
+        + [f"pumsem:{keyword}" for keyword in pumsem_hits]
+        + [f"bom:{keyword}" for keyword in bom_hits]
+    )
+    if material_quote:
+        reason_hits.append("material_quote")
+
+    ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    best_label, best_score = ranked[0]
+    if best_score <= 0:
+        return empty_result
+
+    confidence = _resolve_confidence(
+        label=best_label,
+        scores=scores,
+        bom_structure_hits=bom_structure_score,
+    )
+    if confidence == "low":
+        result = DetectionResult(
+            label=None,
+            confidence="low",
+            scores=scores,
+            reason_hits=reason_hits,
+            material_quote=False,
+            suggestion="",
+        )
+        return DetectionResult(
+            label=result.label,
+            confidence=result.confidence,
+            scores=result.scores,
+            reason_hits=result.reason_hits,
+            material_quote=result.material_quote,
+            suggestion=_build_suggestion(result),
+        )
+
+    reason_hits.extend(
+        f"bom_structure:{keyword}" for keyword in bom_structure_hits
+    )
+    result = DetectionResult(
+        label=best_label,
+        confidence=confidence,
+        scores=scores,
+        reason_hits=reason_hits,
+        material_quote=material_quote,
+        suggestion="",
+    )
+    return DetectionResult(
+        label=result.label,
+        confidence=result.confidence,
+        scores=result.scores,
+        reason_hits=result.reason_hits,
+        material_quote=result.material_quote,
+        suggestion=_build_suggestion(result),
+    )
+
+
+def detect_document_type(text: str) -> str | None:
+    """Backward-compatible wrapper that returns only the label."""
+
+    return analyze_document_type(text).label
 
 
 def suggest_preset(text: str) -> str:
-    """제안 메시지를 생성한다. 빈 문자열 = 제안 없음."""
-    detected = detect_document_type(text)
-    if detected == "estimate":
-        return "💡 견적서로 감지되었습니다. --preset estimate 를 추가하면 견적서 양식으로 출력됩니다."
-    elif detected == "pumsem":
-        return (
-            "💡 품셈 문서로 감지되었습니다. --preset pumsem 을 추가하면 품셈 양식으로 출력되며, "
-            "--toc <목차파일> 이 있으면 더 정확하게 구조화됩니다."
-        )
-    elif detected == "bom":
-        return "💡 BOM 도면으로 감지되었습니다. --preset bom --engine zai 를 추가하면 BOM Excel이 생성됩니다."
-    elif detect_material_quote(text):
-        return (
-            "💡 자재 견적표로 보입니다. BOM보다는 기본 document/generic 경로가 적합합니다."
-        )
-    return ""
+    """Backward-compatible wrapper that returns only the suggestion text."""
+
+    return analyze_document_type(text).suggestion

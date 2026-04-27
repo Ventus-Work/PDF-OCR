@@ -138,3 +138,47 @@ def test_detail_sheet_reads_spaced_composite_alias_headers(tmp_path: Path):
     assert ws.cell(row=4, column=8).value == 603720
     assert ws.cell(row=4, column=10).value == 17082
     assert ws.cell(row=4, column=12).value == 620802
+
+
+def test_detail_sheet_reads_headers_with_section_suffix(tmp_path: Path):
+    suffix_headers = [
+        "품명_1. TT03",
+        "규격_1. TT03",
+        "단위_1. TT03",
+        "수량_1. TT03",
+        "재료비_단가_1. TT03",
+        "재료비_금액_1. TT03",
+        "노무비_단가_1. TT03",
+        "노무비_금액_1. TT03",
+        "경비_단가_1. TT03",
+        "경비_금액_1. TT03",
+        "합계_단가_1. TT03",
+        "합계_금액_1. TT03",
+        "비고_1. TT03",
+    ]
+    row = {
+        "품명_1. TT03": "1) 하지철골 제작 및 설치",
+        "규격_1. TT03": "",
+        "단위_1. TT03": "TON",
+        "수량_1. TT03": "15.75",
+        "재료비_단가_1. TT03": "4,300,000",
+        "재료비_금액_1. TT03": "67,725,000",
+        "노무비_단가_1. TT03": "3,800,000",
+        "노무비_금액_1. TT03": "59,850,000",
+        "경비_단가_1. TT03": "146,000",
+        "경비_금액_1. TT03": "2,299,500",
+        "합계_단가_1. TT03": "8,246,000",
+        "합계_금액_1. TT03": "129,874,500",
+        "비고_1. TT03": "아연도금",
+    }
+
+    out = tmp_path / "detail_suffix.xlsx"
+    ExcelExporter().export([_detail_section(suffix_headers, row)], out)
+
+    wb = openpyxl.load_workbook(out)
+    ws = wb["내역서"]
+
+    assert ws.cell(row=4, column=1).value == "1) 하지철골 제작 및 설치"
+    assert ws.cell(row=4, column=6).value == 67725000
+    assert ws.cell(row=4, column=8).value == 59850000
+    assert ws.cell(row=4, column=12).value == 129874500

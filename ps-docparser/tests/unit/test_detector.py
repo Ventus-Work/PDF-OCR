@@ -1,65 +1,89 @@
-"""
-detector.py 단위 테스트.
-"""
-import pytest
-from detector import detect_document_type, detect_material_quote, suggest_preset
+"""Unit tests for detector.py."""
+
+from detector import (
+    analyze_document_type,
+    detect_document_type,
+    detect_material_quote,
+    suggest_preset,
+)
 
 
-class TestDetectDocumentType:
-    """문서 유형 자동 감지 로직 검증."""
+class TestAnalyzeDocumentType:
+    def test_estimate_high_confidence(self):
+        text = "견적 견적금액 내역서 납품기일 결제조건 견적유효기간 직접비"
 
-    # ── 정상 케이스 ──
-    def test_estimate_by_keyword(self):
-        # THRESHOLD = 4
-        text = "견적금액: 1,000,000원\n내역서 제공\n납품기일 협의\n결제조건 완료"
+        result = analyze_document_type(text)
+
+        assert result.label == "estimate"
+        assert result.confidence == "high"
         assert detect_document_type(text) == "estimate"
 
-    def test_bom_by_bill_of_materials(self):
-        # THRESHOLD_BOM = 3
-        text = "BILL OF MATERIALS\nS/N | SPEC | Q'TY"
-        assert detect_document_type(text) == "bom"
+    def test_estimate_medium_confidence(self):
+        text = "견적 견적금액 내역서 납품기일"
 
-    def test_bom_by_line_list(self):
-        # THRESHOLD_BOM = 3
-        text = "LINE LIST\nLINE NO | MARK | ..."
-        assert detect_document_type(text) == "bom"
+        result = analyze_document_type(text)
 
-    def test_pumsem_by_division(self):
-        # THRESHOLD = 4
-        text = "제1편 단가계산 / 품셈 적용기준 참조\n제6장 보완 노무비 내역."
-        assert detect_document_type(text) == "pumsem"
+        assert result.label == "estimate"
+        assert result.confidence == "medium"
 
-    # ── 엣지 케이스 ──
-    @pytest.mark.parametrize("text,expected", [
-        ("", None),
-        ("   \n\n  ", None),
-        ("알 수 없는 문서 내용", None),
-    ])
-    def test_unknown_or_empty(self, text, expected):
-        assert detect_document_type(text) == expected
+    def test_pumsem_high_confidence(self):
+        text = "품셈 수량산출 부문 공종 단위 적용기준 노무비 참조"
 
-    def test_priority_bom_over_estimate(self):
-        """BOM 키워드가 더 강력한 신호"""
-        # BOM = 3, Estimate = 1 (Estimate < 4 이고, BOM >= 3 이므로 BOM)
-        text = "BILL OF MATERIALS\nS/N | Q'TY\n견적금액도 포함"
-        assert detect_document_type(text) == "bom"
+        result = analyze_document_type(text)
 
-    def test_case_insensitive(self):
-        text = "bill of materials\ns/n | q'ty"
-        assert detect_document_type(text) == "bom"
+        assert result.label == "pumsem"
+        assert result.confidence == "high"
 
-    def test_material_quote_detected_but_not_forced_to_bom(self):
+    def test_bom_high_confidence(self):
+        text = "BILL OF MATERIALS S/N MARK WT(KG) Q'TY MAT'L"
+
+        result = analyze_document_type(text)
+
+        assert result.label == "bom"
+        assert result.confidence == "high"
+
+    def test_bom_medium_confidence(self):
+        text = "LINE LIST\nLINE NO\nMARK"
+
+        result = analyze_document_type(text)
+
+        assert result.label == "bom"
+        assert result.confidence == "medium"
+
+    def test_material_quote_is_forced_to_generic(self):
         text = (
-            "건 적 서\n거래처: 피에스산업\n결정금액 132,570,790\n"
-            "No | 품목 | 재질 | 치수 | 수량 | 중량 | 단가 | 단위 | 공급가액 | 메모"
+            "견적서\n건명\n결정금액\n거래처\n"
+            "항목 사양 치수 수량 단가 공급가액 메모"
         )
+
+        result = analyze_document_type(text)
+
         assert detect_material_quote(text) is True
-        assert detect_document_type(text) is None
+        assert result.label == "estimate"
+        assert result.confidence == "high"
+        assert result.material_quote is True
+        assert "--preset estimate" in result.suggestion
+        assert suggest_preset(text) == result.suggestion
 
-    def test_material_quote_suggestion_points_to_generic_document_flow(self):
-        text = (
-            "견적서\n거래처\n결정금액\n"
-            "품목 재질 치수 수량 중량 단가 단위 공급가액 메모"
-        )
-        suggestion = suggest_preset(text)
-        assert "document/generic" in suggestion
+    def test_estimate_item_table_keywords_route_to_estimate(self):
+        text = "견적서\n품목 재질 치수 수량 중량 단가 단위 공급가액 메모\n결제조건"
+
+        result = analyze_document_type(text)
+
+        assert result.label == "estimate"
+        assert result.confidence == "high"
+
+    def test_ambiguous_mixed_document_stays_generic(self):
+        text = "견적 견적금액 내역서 납품기일 품셈 수량산출 부문 공종"
+
+        result = analyze_document_type(text)
+
+        assert result.label is None
+        assert result.confidence == "low"
+
+    def test_empty_text_returns_generic_low_confidence(self):
+        result = analyze_document_type("")
+
+        assert result.label is None
+        assert result.confidence == "low"
+        assert result.scores == {"estimate": 0, "pumsem": 0, "bom": 0}

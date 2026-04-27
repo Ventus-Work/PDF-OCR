@@ -102,9 +102,9 @@ def pytest_collection_modifyitems(config, items):
     skip_slow = pytest.mark.skip(reason="--run-slow 옵션으로 실행")
 
     for item in items:
-        if "api" in item.keywords and not run_api:
+        if item.get_closest_marker("api") is not None and not run_api:
             item.add_marker(skip_api)
-        if "slow" in item.keywords and not run_slow:
+        if item.get_closest_marker("slow") is not None and not run_slow:
             item.add_marker(skip_slow)
 
 

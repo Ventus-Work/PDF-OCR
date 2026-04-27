@@ -38,7 +38,25 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ── API 키 및 모델 ──
-GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
+def _parse_env_list(*env_names: str) -> tuple[str, ...]:
+    """Parse comma/newline/semicolon-separated environment values."""
+
+    values: list[str] = []
+    for env_name in env_names:
+        raw_value = os.getenv(env_name)
+        if not raw_value:
+            continue
+        normalized = raw_value.replace("\r", "\n")
+        for chunk in normalized.replace(";", "\n").replace(",", "\n").split("\n"):
+            stripped = chunk.strip()
+            if stripped:
+                values.append(stripped)
+    return tuple(values)
+
+
+GEMINI_API_KEYS: tuple[str, ...] = _parse_env_list("GEMINI_API_KEYS", "GEMINI_API_KEY")
+GEMINI_API_KEY: str | None = GEMINI_API_KEYS[0] if GEMINI_API_KEYS else None
+GEMINI_KEY_MAX_CALLS: int = int(os.getenv("GEMINI_KEY_MAX_CALLS", "20"))
 GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 ZAI_API_KEY: str | None = os.getenv("ZAI_API_KEY")
 
@@ -224,9 +242,9 @@ def validate_config(verbose: bool = True) -> dict:
 
     # 2. API 키 검증 (엔진별)
     engine = DEFAULT_ENGINE
-    if engine == "gemini" and not GEMINI_API_KEY:
+    if engine == "gemini" and not GEMINI_API_KEYS:
         result["errors"].append(
-            "DEFAULT_ENGINE=gemini이나 GEMINI_API_KEY가 없습니다. "
+            "DEFAULT_ENGINE=gemini이나 GEMINI_API_KEY 또는 GEMINI_API_KEYS가 없습니다. "
             ".env 파일 확인 또는 --engine local 사용하세요."
         )
     elif engine == "zai" and not ZAI_API_KEY:

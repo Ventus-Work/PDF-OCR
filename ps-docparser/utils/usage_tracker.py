@@ -9,11 +9,15 @@ Why: API 호출 횟수와 토큰 수를 누적하여 예상 비용을 계산한�
 Phase 8: Gemini 가격을 config.py 환경변수에서 로드 + 생성자 주입 허용
 """
 
+import os
+from pathlib import Path
+
 from config import (
     GEMINI_INPUT_PRICE_PER_M,
     GEMINI_OUTPUT_PRICE_PER_M,
     GEMINI_PRICING_MODEL,
 )
+from utils.usage_store import UsageStore
 
 
 class UsageTracker:
@@ -31,7 +35,16 @@ class UsageTracker:
              멀티모델(Gemini+Mistral 혼용) 시 모델별로 다른 가격 주입 가능.
     """
 
-    def __init__(self, input_price: float = None, output_price: float = None):
+    def __init__(
+        self,
+        input_price: float = None,
+        output_price: float = None,
+        *,
+        provider: str | None = None,
+        model: str | None = None,
+        job_id: str | None = None,
+        store_path: str | Path | None = None,
+    ):
         self.total_input_tokens: int = 0
         self.total_output_tokens: int = 0
         self.call_count: int = 0
@@ -39,12 +52,23 @@ class UsageTracker:
         # Why: 테스트에서 monkeypatch 없이 임의 가격 주입 가능하도록
         self.input_price: float = input_price if input_price is not None else GEMINI_INPUT_PRICE_PER_M
         self.output_price: float = output_price if output_price is not None else GEMINI_OUTPUT_PRICE_PER_M
+        self.provider = provider or "unknown"
+        self.model = model or GEMINI_PRICING_MODEL
+        self.job_id = job_id or os.getenv("PS_DOCPARSER_JOB_ID")
+        raw_store_path = store_path or os.getenv("PS_DOCPARSER_USAGE_DB")
+        self.store_path = Path(raw_store_path) if raw_store_path else None
+
+    def set_context(self, *, provider: str, model: str | None = None) -> None:
+        self.provider = provider
+        if model:
+            self.model = model
 
     def add(self, input_tokens: int, output_tokens: int) -> None:
         """호출 1회의 토큰 수를 누적한다."""
         self.total_input_tokens += input_tokens
         self.total_output_tokens += output_tokens
         self.call_count += 1
+        self._persist(input_tokens, output_tokens)
 
     @property
     def total_tokens(self) -> int:
@@ -72,6 +96,29 @@ class UsageTracker:
             f"   - 총 토큰: {self.total_tokens:,}\n"
             f"   - 예상 비용: ${est_cost:.4f} (약 {int(est_cost * 1_400)}원)"
         )
+
+    def _persist(self, input_tokens: int, output_tokens: int) -> None:
+        if self.store_path is None:
+            return
+        token_status = "known" if input_tokens or output_tokens else "unknown"
+        estimated_cost = (
+            (input_tokens / 1_000_000 * self.input_price)
+            + (output_tokens / 1_000_000 * self.output_price)
+        )
+        try:
+            UsageStore(self.store_path).record_event(
+                job_id=self.job_id,
+                engine=self.provider,
+                provider=self.provider,
+                model=self.model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                estimated_cost_usd=estimated_cost,
+                token_status=token_status,
+            )
+        except Exception:
+            # Usage persistence must never fail the parser pipeline.
+            return
 
 
 def parse_usage_metadata(response) -> tuple[int, int]:

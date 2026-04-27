@@ -27,6 +27,7 @@ from parsers.html_utils import (
 from parsers.header_utils import (
     classify_table,
     _is_header_like_row,
+    _is_repeated_section_marker_row,
     detect_header_rows,
     build_composite_headers,
     normalize_header_text,
@@ -59,6 +60,93 @@ __all__ = [
 # ══════════════════════════════════════════════════════════
 # 오케스트레이터 함수 (이 파일에 유지)
 # ══════════════════════════════════════════════════════════
+
+def _make_unique_headers(
+    header_values: list[str],
+    *,
+    preserve_blank: bool = False,
+) -> list[str]:
+    seen: dict[str, int] = {}
+    unique_headers: list[str] = []
+
+    for idx, header in enumerate(header_values):
+        base = normalize_header_text(header) if header else ""
+        if not base:
+            if preserve_blank and seen.get("", 0) == 0:
+                seen[""] = 1
+                unique_headers.append("")
+                continue
+            base = f"col_{idx}"
+
+        count = seen.get(base, 0) + 1
+        seen[base] = count
+        unique_headers.append(base if count == 1 else f"{base}_{count}")
+
+    return unique_headers
+
+
+def _rows_to_dicts(headers: list[str], rows: list[list[str]]) -> list[dict]:
+    rows_as_dicts: list[dict] = []
+    for row in rows:
+        row_dict = {}
+        if headers and _is_repeated_section_marker_row(row):
+            marker = next((cell for cell in row if str(cell).strip()), "")
+            row = [marker] + [""] * (len(headers) - 1)
+        for j, header in enumerate(headers):
+            val = row[j] if j < len(row) else ""
+            row_dict[header] = try_numeric(val)
+        if any(v for v in row_dict.values() if v != "" and v is not None):
+            rows_as_dicts.append(row_dict)
+    return rows_as_dicts
+
+
+def _maybe_parse_bom_table(html: str, table_id: str) -> dict | None:
+    upper_html = html.upper()
+    has_bom_anchor = any(
+        token in upper_html
+        for token in ("BILL OF MATERIAL", "DWG NO", "MAT'L", "LINE LIST")
+    )
+    has_bom_metrics = any(
+        token in upper_html
+        for token in ("WEIGHT", "QTY", "Q'TY", "WT(KG)", "WT (KG)", "수량")
+    )
+    if not (has_bom_anchor and has_bom_metrics):
+        return None
+
+    from parsers.bom_table_parser import parse_html_bom_tables
+    from presets.bom import get_bom_keywords
+
+    parsed = parse_html_bom_tables(html, get_bom_keywords())
+    if parsed.bom_sections:
+        section = parsed.bom_sections[0]
+        headers = _make_unique_headers(section.headers, preserve_blank=True)
+        rows_as_dicts = _rows_to_dicts(headers, section.rows)
+        return {
+            "table_id": table_id,
+            "type": "BOM_자재",
+            "headers": headers,
+            "rows": rows_as_dicts,
+            "notes_in_table": [],
+            "raw_row_count": section.raw_row_count,
+            "parsed_row_count": len(rows_as_dicts),
+        }
+
+    if parsed.line_list_sections:
+        section = parsed.line_list_sections[0]
+        headers = _make_unique_headers(section.headers, preserve_blank=True)
+        rows_as_dicts = _rows_to_dicts(headers, section.rows)
+        return {
+            "table_id": table_id,
+            "type": "BOM_LINE_LIST",
+            "headers": headers,
+            "rows": rows_as_dicts,
+            "notes_in_table": [],
+            "raw_row_count": section.raw_row_count,
+            "parsed_row_count": len(rows_as_dicts),
+        }
+
+    return None
+
 
 def parse_single_table(
     html: str,
@@ -104,21 +192,10 @@ def parse_single_table(
         return None
 
     table_id = f"T-{section_id}-{table_idx:02d}"
-
-    def _make_unique_headers(header_values: list[str]) -> list[str]:
-        seen: dict[str, int] = {}
-        unique_headers: list[str] = []
-
-        for idx, header in enumerate(header_values):
-            base = normalize_header_text(header) if header else ""
-            if not base:
-                base = f"col_{idx}"
-
-            count = seen.get(base, 0) + 1
-            seen[base] = count
-            unique_headers.append(base if count == 1 else f"{base}_{count}")
-
-        return unique_headers
+    if not type_keywords:
+        bom_result = _maybe_parse_bom_table(html, table_id)
+        if bom_result is not None:
+            return bom_result
 
     # 헤더만 있고 데이터 없는 경우
     if len(grid) < 2:
@@ -146,15 +223,7 @@ def parse_single_table(
 
     table_type = classify_table(headers, data_rows, type_keywords)
 
-    rows_as_dicts = []
-    for row in data_rows:
-        row_dict = {}
-        for j, header in enumerate(headers):
-            val = row[j] if j < len(row) else ""
-            row_dict[header] = try_numeric(val)  # [리뷰 반영 3] str 유지
-        # 모든 값이 빈 행 제외
-        if any(v for v in row_dict.values() if v != "" and v is not None):
-            rows_as_dicts.append(row_dict)
+    rows_as_dicts = _rows_to_dicts(headers, data_rows)
 
     return {
         "table_id": table_id,

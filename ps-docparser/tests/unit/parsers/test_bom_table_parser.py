@@ -2,6 +2,8 @@
 parsers/bom_table_parser.py 단위 테스트 — Phase 10 Step 10-1
 목표 커버리지: 22.71% → 75%+
 """
+from pathlib import Path
+
 import pytest
 
 from parsers.bom_table_parser import (
@@ -30,6 +32,11 @@ def bom_keywords():
         "blacklist": ["DRAWING LIST"],
         "noise_row": ["소계", "합계", "TOTAL"],
     }
+
+
+@pytest.fixture
+def fixture_dir() -> Path:
+    return Path(__file__).resolve().parents[2] / "fixtures" / "mock_responses"
 
 
 # ══════════════════════════════════════════════════════════
@@ -296,29 +303,6 @@ class TestParseHtmlBomTables:
     def test_two_row_header_is_merged_and_second_header_row_not_emitted_as_data(self, bom_keywords):
         html = (
             "<table>"
-            "<tr><th>자재명</th><th>규격</th><th>자재중량 [Kg]</th><th>수량</th><th>단위</th></tr>"
-            "<tr><th>ITEM</th><th>SIZE</th><th>WEIGHT</th><th>QTY</th><th>UNIT</th></tr>"
-            "<tr><td>PIPE</td><td>100A</td><td>10.5</td><td>5</td><td>EA</td></tr>"
-            "</table>"
-        )
-        result = parse_html_bom_tables(html, bom_keywords)
-        assert len(result.bom_sections) == 1
-        
-        bom_sec = result.bom_sections[0]
-        # 헤더가 상위 | 하위 로 병합되었는지 확인
-        assert "자재명 | ITEM" in bom_sec.headers
-        assert "규격 | SIZE" in bom_sec.headers
-        assert "자재중량 [Kg] | WEIGHT" in bom_sec.headers
-        assert "수량 | QTY" in bom_sec.headers
-        assert "단위 | UNIT" in bom_sec.headers
-        
-        # 데이터 행에 두 번째 헤더인 ITEM / SIZE / WEIGHT 가 남아있으면 안 됨
-        assert len(bom_sec.rows) == 1
-        assert bom_sec.rows[0] == ["PIPE", "100A", "10.5", "5", "EA"]
-
-    def test_two_row_header_is_merged_and_second_header_row_not_emitted_as_data(self, bom_keywords):
-        html = (
-            "<table>"
             "<tr><th>\uc790\uc7ac\uba85</th><th>\uaddc\uaca9</th><th>\uc790\uc7ac\uc911\ub7c9 [Kg]</th><th>\uc218\ub7c9</th><th>\ub2e8\uc704</th></tr>"
             "<tr><th>ITEM</th><th>SIZE</th><th>WEIGHT</th><th>QTY</th><th>UNIT</th></tr>"
             "<tr><td>PIPE</td><td>100A</td><td>10.5</td><td>5</td><td>EA</td></tr>"
@@ -329,48 +313,121 @@ class TestParseHtmlBomTables:
 
         bom_sec = result.bom_sections[0]
         assert bom_sec.headers == [
-            "\uc790\uc7ac\uba85_ITEM",
-            "\uaddc\uaca9_SIZE",
-            "\uc790\uc7ac\uc911\ub7c9 [Kg]_WEIGHT",
-            "\uc218\ub7c9_QTY",
-            "\ub2e8\uc704_UNIT",
+            "\uc790\uc7ac\uba85 | ITEM",
+            "\uaddc\uaca9 | SIZE",
+            "\uc790\uc7ac\uc911\ub7c9 [Kg] | WEIGHT",
+            "\uc218\ub7c9 | QTY",
+            "\ub2e8\uc704 | UNIT",
         ]
         assert bom_sec.rows == [["PIPE", "100A", "10.5", "5", "EA"]]
 
-    def test_sparse_html_row_is_right_aligned_to_composite_headers(self, bom_keywords):
-        local_keywords = dict(bom_keywords, noise_row=["TOTAL"])
+    def test_rowspan_duplicate_headers_are_collapsed_to_single_header(self, bom_keywords):
         html = (
             "<table>"
             "<tr>"
-            "<th rowspan='2'>ITEM</th>"
             "<th rowspan='2'>DESCRIPTION</th>"
-            "<th rowspan='2'>SIZE</th>"
-            "<th rowspan='2'>MAT'L</th>"
-            "<th rowspan='2'>SCH</th>"
-            "<th rowspan='2'>CLASS</th>"
-            "<th rowspan='2'>ENDS</th>"
-            "<th rowspan='2'>REMARK</th>"
-            "<th rowspan='2'>TAG</th>"
-            "<th colspan='4'>WEIGHT</th>"
+            "<th rowspan='2'>DWG NO.</th>"
+            "<th colspan='2'>WEIGHT</th>"
             "<th rowspan='2'>QTY</th>"
-            "<th rowspan='2'>UNIT</th>"
             "</tr>"
-            "<tr><th>UNIT</th><th>LOSS</th><th>TOTAL</th><th>KG</th></tr>"
-            "<tr>"
-            "<td>1</td>"
-            "<td>Scaffolding \uc124\uce58</td>"
-            "<td>150A</td><td>SS400</td><td>STD</td><td>150#</td><td>BW</td><td>MAIN</td><td>T-1</td>"
-            "<td>1</td><td>\uc2dd</td>"
-            "</tr>"
+            "<tr><th>UNIT</th><th>KG</th></tr>"
+            "<tr><td>PIPE SUPPORT</td><td>D-100</td><td>EA</td><td>12</td><td>3</td></tr>"
             "</table>"
         )
+
+        local_keywords = dict(
+            bom_keywords,
+            bom_header_a=["DESCRIPTION"],
+            bom_header_b=["DWG NO."],
+            bom_header_c=["QTY"],
+        )
+        result = parse_html_bom_tables(html, local_keywords)
+
+        assert len(result.bom_sections) == 1
+        headers = result.bom_sections[0].headers
+        assert headers == ["DESCRIPTION", "DWG NO.", "WEIGHT | UNIT", "WEIGHT | KG", "QTY"]
+        assert "DESCRIPTION | DESCRIPTION" not in headers
+        assert "DWG NO. | DWG NO" not in headers
+
+    def test_distinct_duplicate_headers_are_suffixed(self, bom_keywords):
+        html = (
+            "<table>"
+            "<tr><th>DESCRIPTION</th><th>DWG NO.</th><th colspan='2'>WEIGHT</th><th>QTY</th></tr>"
+            "<tr><th>DESCRIPTION</th><th>DWG NO</th><th>UNIT</th><th>UNIT</th><th>QTY</th></tr>"
+            "<tr><td>PIPE SUPPORT</td><td>D-100</td><td>EA</td><td>KG</td><td>3</td></tr>"
+            "</table>"
+        )
+
+        local_keywords = dict(
+            bom_keywords,
+            bom_header_a=["DESCRIPTION"],
+            bom_header_b=["DWG NO."],
+            bom_header_c=["QTY"],
+        )
+        result = parse_html_bom_tables(html, local_keywords)
+
+        headers = result.bom_sections[0].headers
+        assert headers == [
+            "DESCRIPTION",
+            "DWG NO.",
+            "WEIGHT | UNIT",
+            "WEIGHT | UNIT_2",
+            "QTY",
+        ]
+        assert result.bom_sections[0].rows[0] == ["PIPE SUPPORT", "D-100", "EA", "KG", "3"]
+
+    def test_sparse_html_row_fixture_is_aligned_to_composite_headers(self, bom_keywords, fixture_dir):
+        local_keywords = dict(bom_keywords, noise_row=["TOTAL"])
+        html = (fixture_dir / "bom_sparse_multilevel_table.html").read_text(encoding="utf-8")
 
         result = parse_html_bom_tables(html, local_keywords)
         assert len(result.bom_sections) == 1
 
         bom_sec = result.bom_sections[0]
         assert len(bom_sec.headers) == 15
-        assert "DESCRIPTION_DESCRIPTION" not in bom_sec.headers
+        assert "DESCRIPTION | DESCRIPTION" not in bom_sec.headers
+        assert bom_sec.headers[9:13] == [
+            "WEIGHT | UNIT",
+            "WEIGHT | LOSS",
+            "WEIGHT | TOTAL",
+            "WEIGHT | KG",
+        ]
         assert bom_sec.rows[0][1] == "Scaffolding \uc124\uce58"
         assert bom_sec.rows[0][13] == "1"
         assert bom_sec.rows[0][14] == "\uc2dd"
+
+    def test_quantity_unit_shift_is_repaired_without_touching_normal_rows(self, bom_keywords):
+        html = (
+            "<table>"
+            "<tr>"
+            "<th rowspan='2'>DESCRIPTION</th><th rowspan='2'>DWG NO.</th>"
+            "<th rowspan='2'>MAT'L</th><th rowspan='2'>SIZE</th>"
+            "<th rowspan='2'>수량</th><th rowspan='2'>단위</th>"
+            "<th colspan='2'>자재중량 [Kg]</th><th rowspan='2'>비고</th>"
+            "</tr>"
+            "<tr><th>UNIT</th><th>WEIGHT</th></tr>"
+            "<tr><td>Scaffolding 설치</td><td>KO-D-010-14-16N</td><td></td><td></td><td></td><td>1.0</td><td>식</td><td></td><td></td></tr>"
+            "<tr><td>Travelling Rail 설치</td><td>KO-D-010-14-16N</td><td></td><td>19,800M</td><td>1.0</td><td>식</td><td></td><td></td><td></td></tr>"
+            "</table>"
+        )
+        local_keywords = dict(
+            bom_keywords,
+            bom_header_a=["DESCRIPTION"],
+            bom_header_b=["DWG NO."],
+            bom_header_c=["수량"],
+        )
+
+        result = parse_html_bom_tables(html, local_keywords)
+        assert len(result.bom_sections) == 1
+        rows = result.bom_sections[0].rows
+        headers = result.bom_sections[0].headers
+        qty_idx = headers.index("수량")
+        unit_idx = headers.index("단위")
+        shifted_idx = headers.index("자재중량 [Kg] | UNIT")
+
+        assert rows[0][qty_idx] == "1.0"
+        assert rows[0][unit_idx] == "식"
+        assert rows[0][shifted_idx] == ""
+        assert rows[1][qty_idx] == "1.0"
+        assert rows[1][unit_idx] == "식"
+        assert rows[1][shifted_idx] == ""

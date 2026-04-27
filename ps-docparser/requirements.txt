@@ -14,6 +14,11 @@ lxml>=5.0.0,<6.0.0
 # Excel 출력
 openpyxl>=3.1.0,<4.0.0
 
+# 로컬 웹 API (Phase15)
+fastapi>=0.110.0,<1.0.0
+uvicorn>=0.29.0,<1.0.0
+python-multipart>=0.0.9,<1.0.0
+
 # (선택) OCR 엔진 — 설치되어 있지 않으면 해당 엔진만 비활성화
 # pytesseract>=0.3.10,<1.0.0
 # mistralai>=0.4.0,<1.0.0

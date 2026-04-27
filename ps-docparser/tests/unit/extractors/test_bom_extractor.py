@@ -509,8 +509,13 @@ class TestToSections:
         s = sections[0]
         assert s["section_id"] == "BOM-1"
         assert "BILL OF MATERIALS" in s["title"]
+        assert s["domain"] == "bom"
+        assert s["role"] == "primary_material_table"
+        assert s["quality"]["status"] == "ok"
         assert len(s["tables"]) == 1
         assert s["tables"][0]["parsed_row_count"] == 2
+        assert s["tables"][0]["domain"] == "bom"
+        assert s["tables"][0]["role"] == "primary_material_table"
 
     def test_ll_section_converted(self):
         ll = BomSection(
@@ -525,6 +530,8 @@ class TestToSections:
         assert sections[0]["section_id"] == "LL-1"
         assert "LINE LIST" in sections[0]["title"]
         assert sections[0]["type"] == "line_list"
+        assert sections[0]["role"] == "line_list_table"
+        assert sections[0]["tables"][0]["role"] == "line_list_table"
 
     def test_rows_as_dicts_with_headers(self):
         bom = BomSection(
@@ -549,8 +556,27 @@ class TestToSections:
         )
         res = BomExtractionResult(bom_sections=[bom])
         sections = to_sections(res)
+        headers = sections[0]["tables"][0]["headers"]
         row_dict = sections[0]["tables"][0]["rows"][0]
-        assert "열2" in row_dict or "열3" in row_dict
+        assert headers == list(row_dict.keys())
+        assert headers == ["ITEM", "Column_2", "Column_3"]
+        assert row_dict["Column_2"] == "100A"
+        assert row_dict["Column_3"] == "5"
+
+    def test_empty_generated_tail_column_is_pruned(self):
+        bom = BomSection(
+            "bom",
+            headers=["ITEM"],
+            rows=[["1", ""], ["2", ""]],
+            raw_row_count=2,
+        )
+        res = BomExtractionResult(bom_sections=[bom])
+        sections = to_sections(res)
+        table = sections[0]["tables"][0]
+
+        assert table["headers"] == ["ITEM"]
+        assert list(table["rows"][0].keys()) == ["ITEM"]
+        assert table["quality"] == {"status": "ok", "warnings": []}
 
     def test_empty_bom_rows_skipped(self):
         bom = BomSection("bom", headers=["ITEM"], rows=[], raw_row_count=0)

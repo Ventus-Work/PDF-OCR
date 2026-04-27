@@ -225,6 +225,29 @@ def aggregate_boms(json_files: list[Path]) -> list[dict[str, Any]]:
 
     results = [aggregated_section]
 
+    source_rows = [{"JSON": str(jpath.name)} for jpath in json_files]
+    if source_rows:
+        source_headers = ["JSON"]
+        results.append({
+            "title": "집계 대상 파일",
+            "type": "generic",
+            "text": "BOM AGGREGATION SOURCES",
+            "clean_text": "",
+            "tables": [
+                {
+                    "html": "",
+                    "markdown": "",
+                    "headers": source_headers,
+                    "rows": source_rows,
+                    "array": [source_headers] + [[row["JSON"]] for row in source_rows],
+                    "row_count": len(source_rows) + 1,
+                    "col_count": len(source_headers),
+                    "title": "집계 대상 파일",
+                }
+            ],
+            "key_value": {},
+        })
+
     # [단위 6] 수집된 LINE LIST가 있다면, 별도 섹션(generic)으로 추가
     if line_list_data:
         # 모든 헤더 추출 (순서 보존, SOURCE DOC을 맨 첫열로 배치)

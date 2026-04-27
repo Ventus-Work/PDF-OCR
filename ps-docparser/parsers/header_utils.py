@@ -187,6 +187,25 @@ def _is_header_like_row(row: list[str]) -> bool:
     return non_numeric > len(row) * 0.5
 
 
+def _is_repeated_section_marker_row(row: list[str]) -> bool:
+    """
+    행 전체가 같은 구역명으로 반복 전개된 경우를 감지한다.
+
+    예: <td colspan="13">1. TT03</td> 가 expand_table() 이후 모든 열에
+    "1. TT03" 으로 채워지면, 헤더 3행이 아니라 구역 구분 행으로 보아야 한다.
+    """
+    non_empty = [str(cell).strip() for cell in row if str(cell).strip()]
+    if len(non_empty) < 2:
+        return False
+
+    normalized = [normalize_header_text(cell) for cell in non_empty]
+    if len(set(normalized)) != 1:
+        return False
+
+    marker = normalized[0]
+    return bool(re.match(r"^\d+\.\s*\S+$", marker))
+
+
 def detect_header_rows(grid: list[list[str]]) -> int:
     """
     2D 그리드에서 헤더 행 수를 결정한다 (1~3행).
@@ -210,6 +229,8 @@ def detect_header_rows(grid: list[list[str]]) -> int:
     has_dup_first = len(set(grid[0])) < len(grid[0])
 
     if has_dup_first and len(grid) >= 4:
+        if _is_repeated_section_marker_row(grid[2]):
+            return 2
         if (
             _is_header_like_row(grid[1])
             and _is_header_like_row(grid[2])

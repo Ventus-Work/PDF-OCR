@@ -1,0 +1,113 @@
+[
+  {
+    "section_id": "BOM-1",
+    "title": "BILL OF MATERIALS #1",
+    "type": "bom",
+    "domain": "bom",
+    "role": "primary_material_table",
+    "quality": {
+      "status": "warning",
+      "warnings": [
+        "empty_tail_column"
+      ]
+    },
+    "department": null,
+    "chapter": null,
+    "page": null,
+    "clean_text": "",
+    "tables": [
+      {
+        "table_id": "T-BOM-1-01",
+        "type": "BOM_자재",
+        "domain": "bom",
+        "role": "primary_material_table",
+        "quality": {
+          "status": "warning",
+          "warnings": [
+            "empty_tail_column"
+          ]
+        },
+        "title": "",
+        "headers": [
+          "DESCRIPTION",
+          "DWG NO.",
+          "MAT'L",
+          "SIZE",
+          "수량",
+          "단위",
+          "자재중량 [Kg] | UNIT",
+          "자재중량 [Kg] | WEIGHT",
+          "자재중량 [Kg] | LOSS",
+          "자재중량 [Kg] | WEIGHT_2",
+          "자재면적 [m2] | UNIT",
+          "자재면적 [m2] | m2",
+          "자재면적 [m2] | LOSS",
+          "자재면적 [m2] | m2_2",
+          "비고",
+          "Column_16"
+        ],
+        "rows": [
+          {
+            "DESCRIPTION": "Scaffolding 설치",
+            "DWG NO.": "KO-D-010-14-16N",
+            "MAT'L": "",
+            "SIZE": "",
+            "수량": "1.0",
+            "단위": "식",
+            "자재중량 [Kg] | UNIT": "",
+            "자재중량 [Kg] | WEIGHT": "",
+            "자재중량 [Kg] | LOSS": "",
+            "자재중량 [Kg] | WEIGHT_2": "",
+            "자재면적 [m2] | UNIT": "",
+            "자재면적 [m2] | m2": "",
+            "자재면적 [m2] | LOSS": "",
+            "자재면적 [m2] | m2_2": "",
+            "비고": "",
+            "Column_16": ""
+          },
+          {
+            "DESCRIPTION": "Travelling Rail 설치",
+            "DWG NO.": "KO-D-010-14-16N",
+            "MAT'L": "",
+            "SIZE": "19,800M(6000=3,1800=1)x 2Set",
+            "수량": "1.0",
+            "단위": "식",
+            "자재중량 [Kg] | UNIT": "",
+            "자재중량 [Kg] | WEIGHT": "",
+            "자재중량 [Kg] | LOSS": "",
+            "자재중량 [Kg] | WEIGHT_2": "",
+            "자재면적 [m2] | UNIT": "",
+            "자재면적 [m2] | m2": "",
+            "자재면적 [m2] | LOSS": "",
+            "자재면적 [m2] | m2_2": "",
+            "비고": "",
+            "Column_16": ""
+          },
+          {
+            "DESCRIPTION": "Stud Bolt/Nut Weld",
+            "DWG NO.": "KO-D-010-14-16N",
+            "MAT'L": "",
+            "SIZE": "",
+            "수량": "144.0",
+            "단위": "EA",
+            "자재중량 [Kg] | UNIT": "",
+            "자재중량 [Kg] | WEIGHT": "",
+            "자재중량 [Kg] | LOSS": "",
+            "자재중량 [Kg] | WEIGHT_2": "",
+            "자재면적 [m2] | UNIT": "",
+            "자재면적 [m2] | m2": "",
+            "자재면적 [m2] | LOSS": "",
+            "자재면적 [m2] | m2_2": "",
+            "비고": "",
+            "Column_16": ""
+          }
+        ]
+      }
+    ],
+    "notes": [],
+    "conditions": [],
+    "cross_references": [],
+    "revision_year": null,
+    "unit_basis": null
+  }
+]

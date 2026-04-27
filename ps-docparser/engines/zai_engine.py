@@ -161,6 +161,8 @@ class ZaiEngine(BaseEngine):
                 model="glm-ocr",
                 file=data_uri,
             )
+            if self._tracker:
+                self._tracker.add(0, 0)
             # LayoutParsingResp → dict 변환
             if hasattr(response, 'model_dump'):
                 return response.model_dump()

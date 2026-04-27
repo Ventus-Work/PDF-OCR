@@ -34,6 +34,29 @@ from exporters.excel_styles import (
 )
 
 
+def _display_width(value: str) -> int:
+    """Approximate Excel display width, counting Korean/CJK as wider chars."""
+
+    return sum(2 if ord(char) > 127 else 1 for char in str(value or ""))
+
+
+def _wrapped_row_height(row: dict, headers: list[str], widths: dict[int, int]) -> float:
+    """Estimate a readable row height for wrapped generic-table cells."""
+
+    max_lines = 1
+    for col_idx, header in enumerate(headers, start=1):
+        text = str(row.get(header, "")).strip()
+        if not text:
+            continue
+        usable_width = max(int(widths.get(col_idx, 10)) - 2, 8)
+        for part in text.splitlines() or [text]:
+            display_width = _display_width(part)
+            lines = max(1, (display_width + usable_width - 1) // usable_width)
+            max_lines = max(max_lines, lines)
+
+    return float(min(84, max(18, 15 * max_lines)))
+
+
 # ═══════════════════════════════════════════════════════
 # 내역서 복합 헤더 그룹 정의
 # ═══════════════════════════════════════════════════════
@@ -57,9 +80,23 @@ _DETAIL_CANONICAL_KEYS = [
     for sub_key in sub_keys
 ]
 
+_DETAIL_CANONICAL_KEYS_BY_LENGTH = sorted(
+    _DETAIL_CANONICAL_KEYS,
+    key=len,
+    reverse=True,
+)
+
 
 def _canonicalize_detail_header_key(key: str) -> str:
-    return normalize_header_text(str(key).strip())
+    normalized = normalize_header_text(str(key).strip())
+    if normalized in _DETAIL_CANONICAL_KEYS:
+        return normalized
+
+    for canonical in _DETAIL_CANONICAL_KEYS_BY_LENGTH:
+        if normalized.startswith(f"{canonical}_"):
+            return canonical
+
+    return normalized
 
 
 def _build_detail_alias_map(headers: list[str], rows: list[dict]) -> dict[str, str]:
@@ -313,17 +350,19 @@ def _build_condition_sheet(ws, table: dict):
         return
 
     # ── 헤더 행 ──
+    widths: dict[int, int] = {}
     for col_idx, h in enumerate(headers, start=1):
         cell = ws.cell(row=1, column=col_idx, value=h)
         _apply_style(cell, fill=_FILL_HEADER, font=_FONT_HEADER,
                      align=_ALIGN_CENTER, border=_BORDER_ALL)
         ws.column_dimensions[get_column_letter(col_idx)].width = 45
+        widths[col_idx] = 45
     ws.row_dimensions[1].height = 18
+    ws.freeze_panes = "A2"
 
     # ── 데이터 행 ──
     prev_row_vals: dict[int, str] = {}  # 열 인덱스 → 직전 행 값
     for row_idx, row in enumerate(rows, start=2):
-        ws.row_dimensions[row_idx].height = 16
         for col_idx, h in enumerate(headers, start=1):
             val = str(row.get(h, "")).strip()
             # 같은 열의 직전 행과 동일한 값이면 suppression (rowspan 전개 중복 제거)
@@ -334,6 +373,10 @@ def _build_condition_sheet(ws, table: dict):
             prev_row_vals[col_idx] = val
             cell = ws.cell(row=row_idx, column=col_idx, value=display_val)
             _apply_style(cell, font=_FONT_BODY, align=_ALIGN_LEFT, border=_BORDER_ALL)
+        ws.row_dimensions[row_idx].height = _wrapped_row_height(row, headers, widths)
+
+    if rows and headers:
+        ws.auto_filter.ref = ws.dimensions
 
 
 # ═══════════════════════════════════════════════════════
@@ -372,10 +415,10 @@ def _build_generic_sheet(ws, table: dict):
         _apply_style(cell, fill=_FILL_HEADER, font=_FONT_HEADER,
                      align=_ALIGN_CENTER, border=_BORDER_ALL)
     ws.row_dimensions[1].height = 20
+    ws.freeze_panes = "A2"
 
     # ── 데이터 행 ──
     for row_idx, row in enumerate(rows, start=2):
-        ws.row_dimensions[row_idx].height = 16
         for col_idx, h in enumerate(headers, start=1):
             raw_val = str(row.get(h, "")).strip()
             cell = ws.cell(row=row_idx, column=col_idx)
@@ -394,14 +437,25 @@ def _build_generic_sheet(ws, table: dict):
                              border=_BORDER_ALL)
 
     # ── 열 너비 자동 조정 (한글 2바이트 기준) ──
+    widths: dict[int, int] = {}
     for col_idx, h in enumerate(headers, start=1):
-        header_len = sum(2 if ord(c) > 127 else 1 for c in h)
+        header_len = _display_width(h)
         width = max(header_len + 4, 10)
         for row in rows:
             val = str(row.get(h, ""))
-            val_len = sum(2 if ord(c) > 127 else 1 for c in val)
+            val_len = _display_width(val)
             width = max(width, val_len + 2)
-        ws.column_dimensions[get_column_letter(col_idx)].width = min(width, 50)
+        widths[col_idx] = min(width, 50)
+        ws.column_dimensions[get_column_letter(col_idx)].width = widths[col_idx]
+
+    for row_idx, row in enumerate(rows, start=2):
+        if isinstance(row, dict):
+            ws.row_dimensions[row_idx].height = _wrapped_row_height(row, headers, widths)
+        else:
+            ws.row_dimensions[row_idx].height = 18
+
+    if rows and headers:
+        ws.auto_filter.ref = ws.dimensions
 
 
 # ═══════════════════════════════════════════════════════

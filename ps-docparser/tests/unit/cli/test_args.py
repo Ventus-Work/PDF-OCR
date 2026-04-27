@@ -16,6 +16,8 @@ class TestBuildParser:
         assert "output_format" in actions
         assert "force" in actions
         assert "no_cache" in actions
+        assert "bom_fallback" in actions
+        assert "no_bom_fallback" in actions
 
     def test_no_cache_flag_default_false(self):
         parser = build_argument_parser()
@@ -26,3 +28,18 @@ class TestBuildParser:
         parser = build_argument_parser()
         args = parser.parse_args(["dummy.pdf", "--no-cache"])
         assert args.no_cache is True
+
+    def test_bom_fallback_default_auto(self):
+        parser = build_argument_parser()
+        args = parser.parse_args(["dummy.pdf"])
+        assert args.bom_fallback == "auto"
+
+    def test_bom_fallback_accepts_never(self):
+        parser = build_argument_parser()
+        args = parser.parse_args(["dummy.pdf", "--bom-fallback", "never"])
+        assert args.bom_fallback == "never"
+
+    def test_preset_accepts_generic(self):
+        parser = build_argument_parser()
+        args = parser.parse_args(["dummy.pdf", "--preset", "generic"])
+        assert args.preset == "generic"

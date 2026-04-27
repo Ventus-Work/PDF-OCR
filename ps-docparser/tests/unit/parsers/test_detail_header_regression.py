@@ -71,6 +71,59 @@ DETAIL_HTML = """
 </table>
 """
 
+DETAIL_HTML_WITH_SECTION_MARKER = """
+<table>
+  <thead>
+    <tr>
+      <th>품명</th>
+      <th>규격</th>
+      <th>단위</th>
+      <th>수량</th>
+      <th colspan="2">재료비</th>
+      <th colspan="2">노무비</th>
+      <th colspan="2">경비</th>
+      <th colspan="2">합계</th>
+      <th>비고</th>
+    </tr>
+    <tr>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th>단가</th>
+      <th>금액</th>
+      <th>단가</th>
+      <th>금액</th>
+      <th>단가</th>
+      <th>금액</th>
+      <th>단가</th>
+      <th>금액</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td colspan="13">1. TT03</td>
+    </tr>
+    <tr>
+      <td>1) 하지철골 제작 및 설치</td>
+      <td></td>
+      <td>TON</td>
+      <td>15.75</td>
+      <td>4,300,000</td>
+      <td>67,725,000</td>
+      <td>3,800,000</td>
+      <td>59,850,000</td>
+      <td>146,000</td>
+      <td>2,299,500</td>
+      <td>8,246,000</td>
+      <td>129,874,500</td>
+      <td>아연도금</td>
+    </tr>
+  </tbody>
+</table>
+"""
+
 
 def test_normalize_header_text_compacts_spaced_non_latin_tokens():
     assert normalize_header_text("단 가") == "단가"
@@ -136,3 +189,29 @@ def test_parse_single_table_preserves_distinct_cost_amount_keys():
     assert second_row["노무비_금액"] == "603,720"
     assert second_row["경비_금액"] == "17,082"
     assert second_row["합계_금액"] == "620,802"
+
+
+def test_parse_single_table_does_not_merge_repeated_section_marker_into_headers():
+    result = parse_single_table(DETAIL_HTML_WITH_SECTION_MARKER, "S-01", 4)
+
+    assert result is not None
+    assert result["headers"] == [
+        "품명",
+        "규격",
+        "단위",
+        "수량",
+        "재료비_단가",
+        "재료비_금액",
+        "노무비_단가",
+        "노무비_금액",
+        "경비_단가",
+        "경비_금액",
+        "합계_단가",
+        "합계_금액",
+        "비고",
+    ]
+    assert result["rows"][0]["품명"] == "1. TT03"
+    assert result["rows"][0]["재료비_금액"] == ""
+    assert result["rows"][1]["품명"] == "1) 하지철골 제작 및 설치"
+    assert result["rows"][1]["재료비_금액"] == "67,725,000"
+    assert result["rows"][1]["합계_금액"] == "129,874,500"

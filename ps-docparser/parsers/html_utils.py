@@ -68,45 +68,45 @@ def expand_table(table_tag: Tag) -> list[list[str]]:
     if not rows:
         return []
 
-    # 최대 열 수 추정 (colspan 합산)
-    max_cols = 0
-    for row in rows:
-        cols = 0
-        for cell in row.find_all(["td", "th"]):
-            colspan = int(cell.get("colspan", 1))
-            cols += colspan
-        max_cols = max(max_cols, cols)
-
-    if max_cols == 0:
-        return []
-
     # 2D 그리드 초기화 (None = 아직 채워지지 않음)
-    grid = [[None] * max_cols for _ in range(len(rows))]
+    # rowspan 때문에 아래 행의 실제 열 수가 단순 colspan 합보다 커질 수 있어,
+    # 고정 max_cols를 미리 잡지 않고 채우면서 동적으로 확장한다.
+    grid: list[list[str | None]] = [[] for _ in range(len(rows))]
 
     for r_idx, row in enumerate(rows):
         col_idx = 0
         for cell in row.find_all(["td", "th"]):
             # rowspan에 의해 이미 채워진 셀 건너뛰기
-            while col_idx < max_cols and grid[r_idx][col_idx] is not None:
+            while col_idx < len(grid[r_idx]) and grid[r_idx][col_idx] is not None:
                 col_idx += 1
-            if col_idx >= max_cols:
-                break
 
             rowspan = int(cell.get("rowspan", 1))
             colspan = int(cell.get("colspan", 1))
             text = extract_cell_text(cell)
+            required_cols = col_idx + colspan
+            for grid_row in grid:
+                if len(grid_row) < required_cols:
+                    grid_row.extend([None] * (required_cols - len(grid_row)))
 
             # rowspan × colspan 범위를 동일 값으로 채움
             for dr in range(rowspan):
                 for dc in range(colspan):
                     nr, nc = r_idx + dr, col_idx + dc
-                    if nr < len(grid) and nc < max_cols:
+                    if nr < len(grid):
+                        if len(grid[nr]) <= nc:
+                            grid[nr].extend([None] * (nc + 1 - len(grid[nr])))
                         grid[nr][nc] = text
 
             col_idx += colspan
 
+    max_cols = max((len(row) for row in grid), default=0)
+    if max_cols == 0:
+        return []
+
     # None(미채움 셀) → 빈 문자열
     for r in range(len(grid)):
+        if len(grid[r]) < max_cols:
+            grid[r].extend([None] * (max_cols - len(grid[r])))
         for c in range(max_cols):
             if grid[r][c] is None:
                 grid[r][c] = ""

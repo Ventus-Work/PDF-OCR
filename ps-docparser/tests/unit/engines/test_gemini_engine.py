@@ -24,7 +24,7 @@ def _make_engine(mocker, tracker=None):
     mocker.patch("engines.gemini_engine.time.sleep", return_value=None)
     engine = GeminiEngine(api_key="fake", model="gemini-2.0-flash", tracker=tracker or MagicMock())
     mock_client = MagicMock()
-    engine._client = mock_client
+    engine._clients = {"fake": mock_client}
     return engine, mock_client
 
 
@@ -82,6 +82,42 @@ class TestGeminiEngineExtractTable:
         assert "<!--" in html
         assert "3" in html
         assert in_tok == 0 and out_tok == 0
+
+    def test_rotates_api_keys_after_max_calls(self, mocker):
+        tracker = MagicMock()
+        mocker.patch("engines.gemini_engine.time.sleep", return_value=None)
+
+        client_a = MagicMock()
+        client_b = MagicMock()
+        for client in (client_a, client_b):
+            response = MagicMock()
+            response.text = "<table><tr><td>x</td></tr></table>"
+            response.usage_metadata = MagicMock(
+                prompt_token_count=1,
+                candidates_token_count=1,
+            )
+            client.models.generate_content.return_value = response
+
+        engine = GeminiEngine(
+            api_keys=["key-a", "key-b"],
+            model="gemini-2.0-flash",
+            tracker=tracker,
+            max_calls_per_key=2,
+        )
+        make_client = mocker.patch.object(
+            engine,
+            "_make_client",
+            side_effect=lambda api_key: client_a if api_key == "key-a" else client_b,
+        )
+
+        img = Image.new("RGB", (10, 10))
+        for table_num in range(1, 6):
+            html, _, _ = engine.extract_table(img, table_num=table_num)
+            assert "<table>" in html
+
+        assert make_client.call_count == 2
+        assert client_a.models.generate_content.call_count == 3
+        assert client_b.models.generate_content.call_count == 2
 
 
 class TestGeminiEngineExtractFullPage:

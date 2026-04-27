@@ -1,4 +1,4 @@
-"""CLI 인수 파서. (main.py _build_argument_parser 추출 + --no-cache 신규 추가)"""
+"""CLI 인수 파서. (--no-cache, --no-bom-fallback 포함)"""
 
 import argparse
 
@@ -26,6 +26,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
   tesseract  Tesseract 로컬 OCR (오프라인, 무료)
 
 프리셋:
+  generic  범용 문서 경로 강제 (자동 라우팅 건너뜀)
   pumsem   건설 품셈 전용 (부문명 줄바꿈 보정 활성화)
   estimate 견적서 전용 (Excel 시트 구성 최적화)
   bom      BOM 도면 전용 (OCR 엔진 필수)
@@ -72,7 +73,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--preset",
         default=None,
-        choices=["pumsem", "estimate", "bom"],
+        choices=["generic", "pumsem", "estimate", "bom"],
         help="도메인 프리셋 (기본: 없음=범용)",
     )
     parser.add_argument(
@@ -91,5 +92,16 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--no-cache",
         action="store_true",
         help="테이블 캐시 비활성화 (재실행 강제 시 유용)",
+    )
+    parser.add_argument(
+        "--no-bom-fallback",
+        action="store_true",
+        help="BOM 자동 estimate 재실행 비활성화 (--bom-fallback never 호환 별칭)",
+    )
+    parser.add_argument(
+        "--bom-fallback",
+        default="auto",
+        choices=["auto", "always", "never"],
+        help="BOM estimate 보조 산출물 생성 정책 (기본: auto)",
     )
     return parser

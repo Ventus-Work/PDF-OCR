@@ -128,6 +128,20 @@ class TestExpandTable:
                 assert cell is not None
                 assert isinstance(cell, str)
 
+    def test_rowspan_occupied_slots_expand_grid_width(self):
+        html = (
+            "<table>"
+            "<tr><th rowspan='2'>ITEM</th><th>DESCRIPTION</th></tr>"
+            "<tr><th>DWG NO.</th><th>QTY</th><th>UNIT</th></tr>"
+            "</table>"
+        )
+        tag = make_tag(html)
+        grid = expand_table(tag)
+        assert grid == [
+            ["ITEM", "DESCRIPTION", "", ""],
+            ["ITEM", "DWG NO.", "QTY", "UNIT"],
+        ]
+
 
 # ══════════════════════════════════════════════════════════
 # extract_cell_text
@@ -477,6 +491,58 @@ class TestParseSingleTable:
         )
         result = parse_single_table(html, "S-01", 1, type_keywords=kw)
         assert result["type"] == "A_품셈"
+
+    def test_bom_like_table_uses_bom_parser_normalization(self):
+        html = (
+            "<table class='table table-bordered'>"
+            "<thead>"
+            "<tr>"
+            "<th rowspan='2'>DESCRIPTION</th><th rowspan='2'>DWG NO.</th>"
+            "<th rowspan='2'>MAT'L</th><th rowspan='2'>SIZE</th>"
+            "<th rowspan='2'>수량</th><th rowspan='2'>단위</th>"
+            "<th colspan='4'>자재중량 [Kg]</th><th colspan='4'>자재면적 [m2]</th>"
+            "<th rowspan='2'>비고</th>"
+            "</tr>"
+            "<tr>"
+            "<th>UNIT</th><th>WEIGHT</th><th>LOSS</th><th>WEIGHT</th>"
+            "<th>UNIT</th><th>m2</th><th>LOSS</th><th>m2</th>"
+            "</tr>"
+            "</thead>"
+            "<tbody>"
+            "<tr><td colspan='3'>◇ 대산 HD현대오일백크 10TON CRANE 설치공사</td>"
+            "<td></td><td></td><td></td><td></td><td></td><td></td><td></td>"
+            "<td></td><td></td><td></td><td></td><td></td><td></td></tr>"
+            "<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>"
+            "<tr><td>Scaffolding 설치</td><td>KO-D-010-14-16N</td><td></td><td></td><td></td><td>1.0</td><td>식</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>"
+            "<tr><td>Travelling Rail 설치</td><td>KO-D-010-14-16N</td><td></td><td>19,800M(6000=3,1800=1)x 2Set</td><td>1.0</td><td>식</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>"
+            "</tbody></table>"
+        )
+        result = parse_single_table(html, "S-01", 1)
+
+        assert result["type"] == "BOM_자재"
+        assert result["headers"] == [
+            "DESCRIPTION",
+            "DWG NO.",
+            "MAT'L",
+            "SIZE",
+            "수량",
+            "단위",
+            "자재중량 [Kg] | UNIT",
+            "자재중량 [Kg] | WEIGHT",
+            "자재중량 [Kg] | LOSS",
+            "자재중량 [Kg] | WEIGHT_2",
+            "자재면적 [m2] | UNIT",
+            "자재면적 [m2] | m2",
+            "자재면적 [m2] | LOSS",
+            "자재면적 [m2] | m2_2",
+            "비고",
+            "Column_16",
+        ]
+        assert result["rows"][0]["DESCRIPTION"] == "Scaffolding 설치"
+        assert result["rows"][0]["수량"] == "1.0"
+        assert result["rows"][0]["단위"] == "식"
+        assert result["rows"][0]["자재중량 [Kg] | UNIT"] == ""
+        assert result["rows"][1]["SIZE"] == "19,800M(6000=3,1800=1)x 2Set"
 
 
 # ══════════════════════════════════════════════════════════

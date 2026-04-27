@@ -10,6 +10,46 @@ Why: Phase 12 Step 12-3 분해 결과물.
 """
 
 from extractors.bom_types import BomExtractionResult
+from validators.output_quality import prune_empty_tail_columns, validate_bom_table
+
+
+def _dedupe_headers(headers: list[str]) -> list[str]:
+    deduped_headers = []
+    seen = {}
+    for idx, h in enumerate(headers):
+        base = h or f"Column_{idx + 1}"
+        if base in seen:
+            seen[base] += 1
+            deduped_headers.append(f"{base}_{seen[base]}")
+        else:
+            seen[base] = 1
+            deduped_headers.append(base)
+    return deduped_headers
+
+
+def _headers_for_rows(headers: list[str], rows: list[list[str]]) -> list[str]:
+    max_row_len = max((len(row) for row in rows), default=0)
+    expanded = list(headers)
+    for idx in range(len(expanded), max_row_len):
+        expanded.append(f"Column_{idx + 1}")
+    return expanded
+
+
+def _rows_to_dicts(headers: list[str], rows: list[list[str]]) -> list[dict]:
+    rows_as_dicts = []
+    for row in rows:
+        row_dict = {}
+        for j, key in enumerate(headers):
+            row_dict[key] = row[j] if j < len(row) else ""
+        rows_as_dicts.append(row_dict)
+    return rows_as_dicts
+
+
+def _normalize_table(headers: list[str], rows: list[list[str]]) -> tuple[list[str], list[dict]]:
+    rows_as_dicts = _rows_to_dicts(headers, rows)
+    table = {"headers": headers, "rows": rows_as_dicts}
+    prune_empty_tail_columns(table)
+    return list(table["headers"]), list(table["rows"])
 
 
 def to_sections(result: BomExtractionResult) -> list[dict]:
@@ -53,28 +93,18 @@ def to_sections(result: BomExtractionResult) -> list[dict]:
     for i, bom in enumerate(result.bom_sections, 1):
         if not bom.rows:
             continue
-            
-        deduped_headers = []
-        seen = {}
-        for h in bom.headers:
-            if h in seen:
-                seen[h] += 1
-                deduped_headers.append(f"{h}_{seen[h]}")
-            else:
-                seen[h] = 1
-                deduped_headers.append(h)
 
-        rows_as_dicts = []
-        for row in bom.rows:
-            row_dict = {}
-            for j, cell in enumerate(row):
-                key = deduped_headers[j] if j < len(deduped_headers) else f"열{j+1}"
-                row_dict[key] = cell
-            rows_as_dicts.append(row_dict)
+        deduped_headers = _dedupe_headers(_headers_for_rows(bom.headers, bom.rows))
+        deduped_headers, rows_as_dicts = _normalize_table(deduped_headers, bom.rows)
+        quality = validate_bom_table(deduped_headers, rows_as_dicts)
 
         sections.append({
             "section_id": f"BOM-{i}",
             "title": f"BILL OF MATERIALS #{i}",
+            "type": "bom",
+            "domain": "bom",
+            "role": "primary_material_table",
+            "quality": quality,
             "department": None,
             "chapter": None,
             "page": bom.source_page,
@@ -82,6 +112,9 @@ def to_sections(result: BomExtractionResult) -> list[dict]:
             "tables": [{
                 "table_id": f"T-BOM-{i}-01",
                 "type": "BOM_자재",
+                "domain": "bom",
+                "role": "primary_material_table",
+                "quality": quality,
                 "headers": deduped_headers,
                 "rows": rows_as_dicts,
                 "notes_in_table": [],
@@ -98,29 +131,18 @@ def to_sections(result: BomExtractionResult) -> list[dict]:
     for i, ll in enumerate(result.line_list_sections, 1):
         if not ll.rows:
             continue
-            
-        deduped_headers = []
-        seen = {}
-        for h in ll.headers:
-            if h in seen:
-                seen[h] += 1
-                deduped_headers.append(f"{h}_{seen[h]}")
-            else:
-                seen[h] = 1
-                deduped_headers.append(h)
 
-        rows_as_dicts = []
-        for row in ll.rows:
-            row_dict = {}
-            for j, cell in enumerate(row):
-                key = deduped_headers[j] if j < len(deduped_headers) else f"열{j+1}"
-                row_dict[key] = cell
-            rows_as_dicts.append(row_dict)
+        deduped_headers = _dedupe_headers(_headers_for_rows(ll.headers, ll.rows))
+        deduped_headers, rows_as_dicts = _normalize_table(deduped_headers, ll.rows)
+        quality = validate_bom_table(deduped_headers, rows_as_dicts)
 
         sections.append({
             "section_id": f"LL-{i}",
             "title": f"LINE LIST #{i}",
             "type": "line_list",   # aggregate_boms()의 sec_type 분기 식별용
+            "domain": "bom",
+            "role": "line_list_table",
+            "quality": quality,
             "department": None,
             "chapter": None,
             "page": ll.source_page,
@@ -128,6 +150,9 @@ def to_sections(result: BomExtractionResult) -> list[dict]:
             "tables": [{
                 "table_id": f"T-LL-{i}-01",
                 "type": "BOM_LINE_LIST",
+                "domain": "bom",
+                "role": "line_list_table",
+                "quality": quality,
                 "headers": deduped_headers,
                 "rows": rows_as_dicts,
                 "notes_in_table": [],

@@ -99,6 +99,11 @@ def _normalize_sheet_token(value: Any) -> str:
 
 
 def _generic_sheet_base_name(table: dict, default_prefix: str) -> str:
+    if table.get("role") == "source_info_table":
+        return "업체정보"
+    if table.get("role") == "material_quantity_table":
+        return "물량산출표"
+
     section_title = _normalize_sheet_token(table.get("section_title", ""))
     explicit_title = _normalize_sheet_token(table.get("title", ""))
     table_type = str(table.get("type", ""))
@@ -113,6 +118,12 @@ def _generic_sheet_base_name(table: dict, default_prefix: str) -> str:
         return explicit_title
 
     return type_label or default_prefix
+
+
+def _bom_sheet_base_name(table: dict) -> str:
+    if table.get("role") == "line_list_table" or table.get("type") == "BOM_LINE_LIST":
+        return "BOM_LINE_LIST"
+    return _generic_sheet_base_name(table, "BOM_자재표")
 
 
 def _make_unique_sheet_name(base: str, used_names: set[str]) -> str:
@@ -264,7 +275,7 @@ def _export_impl(
     # ── BOM 범용 시트 (P3) ──
     if bom_generic_tables:
         for tbl in bom_generic_tables:
-            base_name = _generic_sheet_base_name(tbl, "BOM_자재표")
+            base_name = _bom_sheet_base_name(tbl)
             sheet_name = _make_unique_sheet_name(base_name, used_sheet_names)
             ws_gen = wb.create_sheet(sheet_name)
             ws_gen.sheet_view.showGridLines = False

@@ -21,6 +21,25 @@ _PUMSEM_GENERIC_TYPES = {"A_품셈", "B_규모기준", "C_구분설명"}
 # ═══════════════════════════════════════════════════════
 
 def _classify_table(table: dict) -> str:
+    domain = table.get("domain")
+    role = table.get("role")
+
+    if table.get("domain") == "bom" and table.get("role") in {
+        "primary_material_table",
+        "line_list_table",
+    }:
+        return "bom_generic"
+    if domain == "estimate" and role == "estimate_table":
+        return "estimate"
+    if domain == "estimate" and role == "detail_table":
+        return "detail"
+    if domain == "estimate" and role == "condition_table":
+        return "condition"
+    if role == "material_quantity_table":
+        return "generic"
+    if domain in {"pumsem", "trade_statement"}:
+        return "generic"
+
     table_type = str(table.get("type", ""))
     if table_type in _PUMSEM_GENERIC_TYPES:
         return "generic"

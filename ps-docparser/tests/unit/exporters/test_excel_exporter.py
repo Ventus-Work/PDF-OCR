@@ -82,6 +82,49 @@ class TestClassifyTable:
         }
         assert _classify_table(table) == "generic"
 
+    def test_bom_domain_role_takes_priority(self):
+        table = {
+            "domain": "bom",
+            "role": "line_list_table",
+            "headers": ["LINE NO.", "SIZE"],
+            "rows": [],
+        }
+        assert _classify_table(table) == "bom_generic"
+
+    def test_estimate_domain_roles_take_priority(self):
+        assert _classify_table({
+            "domain": "estimate",
+            "role": "estimate_table",
+            "headers": ["X"],
+            "rows": [],
+        }) == "estimate"
+        assert _classify_table({
+            "domain": "estimate",
+            "role": "detail_table",
+            "headers": ["X"],
+            "rows": [],
+        }) == "detail"
+        assert _classify_table({
+            "domain": "estimate",
+            "role": "condition_table",
+            "headers": ["X"],
+            "rows": [],
+        }) == "condition"
+
+    def test_pumsem_and_trade_domains_stay_generic(self):
+        assert _classify_table({
+            "domain": "pumsem",
+            "role": "pumsem_quantity_table",
+            "headers": ["수량", "금액"],
+            "rows": [],
+        }) == "generic"
+        assert _classify_table({
+            "domain": "trade_statement",
+            "role": "trade_statement_table",
+            "headers": ["금액", "수량"],
+            "rows": [],
+        }) == "generic"
+
 
 # ─────────────────────────────────────────────────────────────
 # _try_parse_number
@@ -203,6 +246,48 @@ class TestExcelExporterExport:
         sheet_names = wb.sheetnames
         assert any("Table" in s or "BOM" in s or s for s in sheet_names)
 
+    def test_generic_table_sets_readability_controls(self, tmp_path: Path):
+        import openpyxl
+
+        long_text = "반복 조건 문구가 길어서 처음 열었을 때 잘리지 않아야 합니다. " * 3
+        section = {
+            "title": "견적서",
+            "tables": [
+                {
+                    "headers": ["No", "품목", "비고"],
+                    "rows": [{"No": "1", "품목": "GI SHEET", "비고": long_text}],
+                    "type": "generic",
+                    "title": "",
+                }
+            ],
+        }
+        out = tmp_path / "generic_readability.xlsx"
+        ExcelExporter().export([section], out)
+
+        ws = openpyxl.load_workbook(out)["Table"]
+        assert ws.freeze_panes == "A2"
+        assert ws.auto_filter.ref is not None
+        assert ws.row_dimensions[2].height > 16
+
+    def test_source_info_role_uses_business_info_sheet_name(self, tmp_path: Path):
+        import openpyxl
+
+        section = {
+            "title": "견적서",
+            "tables": [
+                {
+                    "domain": "generic",
+                    "role": "source_info_table",
+                    "headers": ["항목", "값"],
+                    "rows": [{"항목": "상호", "값": "고려철강(주)"}],
+                }
+            ],
+        }
+        out = tmp_path / "source_info.xlsx"
+        ExcelExporter().export([section], out)
+
+        assert "업체정보" in openpyxl.load_workbook(out).sheetnames
+
     def test_generic_pumsem_table_uses_meaningful_sheet_name(self, tmp_path: Path):
         import openpyxl
         section = {
@@ -240,6 +325,34 @@ class TestExcelExporterExport:
         ExcelExporter().export([section], out)
         wb = openpyxl.load_workbook(out)
         assert "조건" in wb.sheetnames
+        assert wb["조건"].freeze_panes == "A2"
+
+    def test_bom_domain_roles_create_stable_sheet_names(self, tmp_path: Path):
+        import openpyxl
+        section = {
+            "title": "BOM",
+            "domain": "bom",
+            "tables": [
+                {
+                    "headers": ["S/N", "SIZE", "Q'TY"],
+                    "rows": [{"S/N": "1", "SIZE": "H200", "Q'TY": "890"}],
+                    "type": "BOM_자재",
+                    "domain": "bom",
+                    "role": "primary_material_table",
+                },
+                {
+                    "headers": ["LINE NO.", "SIZE", "ITEM"],
+                    "rows": [{"LINE NO.": "L-001", "SIZE": "450A", "ITEM": "GUIDE"}],
+                    "type": "BOM_LINE_LIST",
+                    "domain": "bom",
+                    "role": "line_list_table",
+                },
+            ],
+        }
+        out = tmp_path / "bom_roles.xlsx"
+        ExcelExporter().export([section], out)
+        wb = openpyxl.load_workbook(out)
+        assert wb.sheetnames == ["BOM_자재표", "BOM_LINE_LIST"]
 
 
 # ─────────────────────────────────────────────────────────────
